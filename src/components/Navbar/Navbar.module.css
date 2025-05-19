@@ -1,4 +1,4 @@
-/* Base layout (unchanged sections omitted for brevity) */
+/* Base layout */
 .navbar {
   display: flex;
   align-items: center;
@@ -32,7 +32,7 @@
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  margin-left: 7rem;
+  margin-left: 3rem; /* Default margin */
   cursor: pointer;
   text-decoration: none;
 }
@@ -47,13 +47,36 @@
   color: white;
 }
 
-.navbarLinks {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 2rem;
-  list-style: none;
+.loginButton {
+  background-color: #0073FF;
+  color: white;
+  padding: 0.5rem 1.25rem;
+  border-radius: 9999px;
+  font-size: 1rem;
+  text-decoration: none;
+  transition: background-color 0.3s ease;
+  margin-right: 3rem; /* Default margin */
+}
+
+.loginButton:hover {
+  background-color: #005ed6;
+}
+
+/* Navbar links for desktop */
+@media (min-width: 769px) {
+  .navbarLinks {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+  }
+
+  .mobileLogin,
+  .closeBtn {
+    display: none;
+  }
 }
 
 .navbarLinks a {
@@ -67,19 +90,25 @@
   color: #e5e7eb;
 }
 
-.loginButton {
-  background-color: #0073FF;
-  color: white;
-  padding: 0.5rem 1.25rem;
-  border-radius: 9999px;
-  font-size: 1rem;
-  text-decoration: none;
-  transition: background-color 0.3s ease;
-  margin-right: 7rem;
+/* Responsive margins */
+@media (min-width: 1024px) {
+  .navbarLeft {
+    margin-left: 7rem;
+  }
+
+  .loginButton {
+    margin-right: 7rem;
+  }
 }
 
-.loginButton:hover {
-  background-color: #005ed6;
+@media (max-width: 900px) {
+  .navbarLeft {
+    margin-left: 1.5rem;
+  }
+
+  .loginButton {
+    margin-right: 3rem;
+  }
 }
 
 /* Mobile styles */
@@ -103,54 +132,68 @@
 
   .navbarLinks {
     position: fixed;
-    top: 70px;
-    left: 0;
+    top: 0;
     right: 0;
+    bottom: 0;
     background-color: #111;
     flex-direction: column;
-    align-items: center;
-    padding: 2rem 1rem;
-    transform: translateY(-100%);
-    opacity: 0;
-    transition: transform 0.3s ease, opacity 0.3s ease;
-    z-index: 100;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    display: none;
+    align-items: stretch;
+    padding: 1rem 1.5rem 2rem 1.5rem;
+    transform: translateX(100%);
+    transition: transform 0.3s ease-in-out;
+    z-index: 999;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+    display: flex;
+
+    width: 250px;
+    min-width: 250px;
+    gap: 1.5rem;
   }
 
   .showMenu {
-    display: flex;
-    transform: translateY(0);
-    opacity: 1;
+    transform: translateX(0);
   }
 
   .navbarLinks li {
-    padding: 0.8rem 0;
     width: 100%;
-    text-align: center;
+    text-align: left;
+    padding: 0.2rem 0;
+  }
+
+  .navbarLinks a {
+    font-size: 1rem;
+    width: 100%;
+    display: block;
   }
 
   .mobileLogin a {
-    background-color: #0073ff;
-    padding: 0.5rem 1.5rem;
-    border-radius: 9999px;
-    display: inline-block;
+    background-color: #0073FF;
     color: white;
+    padding: 0.5rem 1.25rem;
+    border-radius: 9999px;
+    font-size: 1rem;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
     margin-top: 1rem;
+    width: auto;
+    display: inline-block;
   }
 
   .mobileLogin a:hover {
     background-color: #005ed6;
   }
-}
 
-/* Overlay behind mobile menu */
-.overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  z-index: 90;
+  .overlay {
+    display: none;
+  }
+
+  .closeBtn {
+    align-self: flex-end;
+    font-size: 2rem;
+    font-weight: lighter;
+    margin-right: 0.5rem;
+    color: white;
+    cursor: pointer;
+    line-height: 1;
+  }
 }

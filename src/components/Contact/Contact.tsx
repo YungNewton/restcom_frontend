@@ -29,7 +29,7 @@ const Contact = () => {
   }
 
   return (
-    <section className={styles.contactSection}>
+    <section id="contact" className={styles.contactSection}>
       <h2 className={styles.heading}>Still Got Questions?</h2>
       <p className={styles.subtext}>
         Send a message and our team will get back to you in less than an hour.

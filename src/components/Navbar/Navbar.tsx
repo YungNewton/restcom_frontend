@@ -22,11 +22,14 @@ const Navbar = () => {
         </div>
 
         <ul className={`${styles.navbarLinks} ${menuOpen ? styles.showMenu : ''}`}>
+          <li className={styles.closeBtn}><span onClick={toggleMenu}>×</span></li>
           <li><a href="#product" onClick={toggleMenu}>Product</a></li>
           <li><a href="#pricing" onClick={toggleMenu}>Pricing</a></li>
           <li><a href="#blog" onClick={toggleMenu}>Blog</a></li>
           <li><a href="#contact" onClick={toggleMenu}>Contact</a></li>
-          <li className={styles.mobileLogin}><a href="/login">Login</a></li>
+          <li className={styles.mobileLogin}>
+            <a href="/login" onClick={toggleMenu}>Login</a>
+          </li>
         </ul>
 
         <a href="/login" className={styles.loginButton}>Login</a>
