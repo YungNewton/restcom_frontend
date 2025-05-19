@@ -92,7 +92,7 @@
 
 .heroImage {
     display: block;
-    margin: -2.5rem auto 0 auto; /* ✅ centers it horizontally */
+    margin: -2.5rem auto 0 auto;
     width: 75vw;
     max-width: 10000px;
     height: auto;
