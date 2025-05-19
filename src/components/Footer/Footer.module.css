@@ -1,0 +1,42 @@
+.footer {
+    background-color: #000;
+    padding: 3.5rem 7rem 3rem;
+    color: #ccc;
+  }
+  
+  .divider {
+    border-top: 1px solid rgba(255, 255, 255, 0.8);
+    margin-bottom: 2rem;
+  }
+  
+  .footerContent {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  
+  .footerLeft {
+    font-size: 0.95rem;
+    color: #ccc;
+    margin-bottom: 1rem;
+  }
+  
+  .footerRight {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  
+  .logo {
+    height: 32px;
+  }
+  
+  .brandText {
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: white;
+  }
+  

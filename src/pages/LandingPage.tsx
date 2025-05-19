@@ -2,6 +2,7 @@ import Hero from '../components/Hero/Hero'
 import Products from '../components/Products/Products'
 import Pricing from '../components/Pricing/Pricing'
 import Contact from '../components/Contact/Contact'
+import Footer from '../components/Footer/Footer'
 
 const HomePage = () => {
   return (
@@ -10,6 +11,7 @@ const HomePage = () => {
       <Products />
       <Pricing />
       <Contact />
+      <Footer />
     </div>
   )
 }
