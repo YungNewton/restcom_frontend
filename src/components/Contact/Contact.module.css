@@ -14,7 +14,7 @@
 .subtext {
   font-size: 1.4rem;
   color: #ccc;
-  margin-bottom: 3rem;
+  margin-bottom: 6rem;
 }
 
 .contactBox {
@@ -27,6 +27,7 @@
   padding: 2rem;
   position: relative;
   box-sizing: border-box;
+  max-width: 100%;
 }
 
 .imageBox {
@@ -121,7 +122,7 @@ button:hover {
 
   .mascot {
     width: 150px;
-    top: -120px;
+    top: -125px;
   }
 }
 
@@ -136,7 +137,7 @@ button:hover {
 
   .mascot {
     width: 120px;
-    top: -100px;
+    top: -105px;
     right: 10px;
   }
 
@@ -173,7 +174,11 @@ button:hover {
   }
 
   .formBox {
+    width: 100%;
+    max-width: 100%;
     padding: 1.2rem;
+    box-sizing: border-box;
+    min-width: 0px;
   }
 
   .formBox form {
