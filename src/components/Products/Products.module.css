@@ -24,26 +24,26 @@
   }
   
   .cards {
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 2rem;
-    flex-wrap: wrap;
+    justify-content: center;
   }
   
   .card {
-  background: linear-gradient(to bottom, #111 0%, #000 100%);
-  padding: 2rem;
-  border-radius: 1rem;
-  width: 400px;
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.05);
-  transition: transform 300ms ease-out, box-shadow 300ms ease-out;
-  will-change: transform;
-}
-
-.card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 24px rgba(255, 255, 255, 0.1);
-}
+    background: linear-gradient(to bottom, #111 0%, #000 100%);
+    padding: 2rem;
+    border-radius: 1rem;
+    width: 100%;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.05);
+    transition: transform 300ms ease-out, box-shadow 300ms ease-out;
+    will-change: transform;
+  }
+  
+  .card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 24px rgba(255, 255, 255, 0.1);
+  }
   
   .icon {
     width: 120px;
@@ -75,7 +75,6 @@
   
   .toolCardWrapper {
     position: relative;
-    margin-bottom: 3rem;
   }
   
   .mascot {
@@ -134,9 +133,9 @@
   
   .toolActions {
     display: flex;
-    flex-direction: row;       
+    flex-direction: row;
     align-items: center;
-    gap: 1rem;                 
+    gap: 1rem;
     margin-top: 1rem;
   }
   
@@ -165,7 +164,7 @@
   
   .toolLink:hover {
     text-decoration: underline;
-  }  
+  }
   
   .toolIcon {
     width: 280px;
