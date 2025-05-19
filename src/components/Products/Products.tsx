@@ -1,3 +1,7 @@
+import { useEffect } from 'react'
+import AOS from 'aos'
+import 'aos/dist/aos.css'
+
 import styles from './Products.module.css'
 import iconDescribe from '../../assets/icon-describe.png'
 import iconReview from '../../assets/icon-review.png'
@@ -10,6 +14,10 @@ import imageIcon from '../../assets/icon-image.png'
 import mascot from '../../assets/ai-mascot.png'
 
 const Products = () => {
+  useEffect(() => {
+    AOS.init({ duration: 1000, once: true })
+  }, [])
+
   return (
     <section className={styles.products}>
       <div className={styles.textCenter}>
@@ -21,21 +29,21 @@ const Products = () => {
       </div>
 
       <div className={styles.cards}>
-        <div className={styles.card}>
+        <div className={styles.card} data-aos="fade-right">
           <img src={iconDescribe} alt="Describe Icon" className={styles.icon} />
           <h3 className={styles.cardTitle}>Describe Your Idea</h3>
           <p className={styles.cardText}>
             Tell our AI what you need; a logo, banner, social post, etc.
           </p>
         </div>
-        <div className={styles.card}>
+        <div className={styles.card} data-aos="fade-left">
           <img src={iconReview} alt="Review Icon" className={styles.icon} />
           <h3 className={styles.cardTitle}>Review Output</h3>
           <p className={styles.cardText}>
             Get multiple visual variations based on your input.
           </p>
         </div>
-        <div className={styles.card}>
+        <div className={styles.card} data-aos="fade-right">
           <img src={iconDownload} alt="Download Icon" className={styles.icon} />
           <h3 className={styles.cardTitle}>Refine or Download</h3>
           <p className={styles.cardText}>
@@ -52,7 +60,7 @@ const Products = () => {
 
         <div className={styles.toolCardWrapper}>
           <img src={mascot} alt="AI Mascot" className={styles.mascot} />
-          <div className={styles.toolCard}>
+          <div className={styles.toolCard} data-aos="fade-right">
             <div className={styles.toolContent}>
               <h3>AI Email Outreach Assistant</h3>
               <p>Enables manual or AI-generated email messages and targeted or global send-outs based on the scraped contact list</p>
@@ -65,7 +73,7 @@ const Products = () => {
           </div>
         </div>
 
-        <div className={`${styles.toolCard} ${styles.reverse}`}>
+        <div className={`${styles.toolCard} ${styles.reverse}`} data-aos="fade-left">
           <div className={styles.toolContent}>
             <h3>Voice Cloning & Text-to-Speech Engine</h3>
             <p>Converts PDF books or text into audio using cloned voices to create audiobooks with personalized models.</p>
@@ -77,7 +85,7 @@ const Products = () => {
           <img src={voiceIcon} alt="Voice Icon" className={styles.toolIcon} />
         </div>
 
-        <div className={styles.toolCard}>
+        <div className={styles.toolCard} data-aos="fade-right">
           <div className={styles.toolContent}>
             <h3>AI Video Generator</h3>
             <p>Enables users to create videos based on their ideas and inputs, potentially using AI-generated visuals and voiceovers.</p>
@@ -89,7 +97,7 @@ const Products = () => {
           <img src={videoIcon} alt="Video Icon" className={styles.toolIcon} />
         </div>
 
-        <div className={`${styles.toolCard} ${styles.reverse}`}>
+        <div className={`${styles.toolCard} ${styles.reverse}`} data-aos="fade-left">
           <div className={styles.toolContent}>
             <h3>Logo & Image Generator</h3>
             <p>Allows users to describe visual concepts for logos or graphics and get AI-generated image options.</p>

@@ -31,17 +31,19 @@
   }
   
   .card {
-    background: linear-gradient(to bottom, #111 0%, #000 100%);
-    padding: 2rem;
-    border-radius: 1rem;
-    width: 400px;
-    box-shadow: 0 0 8px rgba(255, 255, 255, 0.05);
-    transition: transform 0.3s ease;
-  }
-  
-  .card:hover {
-    transform: translateY(-5px);
-  }
+  background: linear-gradient(to bottom, #111 0%, #000 100%);
+  padding: 2rem;
+  border-radius: 1rem;
+  width: 400px;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.05);
+  transition: transform 300ms ease-out, box-shadow 300ms ease-out;
+  will-change: transform;
+}
+
+.card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 24px rgba(255, 255, 255, 0.1);
+}
   
   .icon {
     width: 120px;
