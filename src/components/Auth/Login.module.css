@@ -1,0 +1,293 @@
+.loginPage {
+    height: 100vh;
+    background-color: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    position: relative;
+    color: white;
+  }
+  
+  .navbarLeft {
+    position: absolute;
+    top: 1.5rem;
+    left: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    text-decoration: none;
+  }
+  
+  .brandWrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    text-decoration: none;
+  }
+  
+  .logo {
+    height: 30px;
+  }
+  
+  .brandText {
+    font-size: 1.6rem;
+    font-weight: 500;
+    color: white;
+  }
+  
+  .formWrapper {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+  
+  .form {
+    background: linear-gradient(to bottom right, rgba(30, 30, 30, 0.95), rgba(15, 15, 15, 0.95));
+    padding: 1.5rem;
+    border-radius: 1rem;
+    width: 100%;
+    max-width: 500px;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 12px 24px rgba(0, 0, 0, 0.4),
+      inset 0 0 20px rgba(255, 255, 255, 0.02),
+      0 0 0 1px rgba(255, 255, 255, 0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  
+  .form:hover {
+    transform: scale(1.015);
+  }
+  
+  .form::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -75%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+      120deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 50%, /* Subtle brightness */
+      transparent 100%
+    );
+    transform: rotate(25deg);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    will-change: transform, opacity;
+  }
+  
+  .form:hover::before {
+    animation: shine 1.2s ease-in-out forwards;
+    opacity: 1;
+  }
+  
+  @keyframes shine {
+    0% {
+      transform: translateX(-100%) rotate(25deg);
+      opacity: 0;
+    }
+    40% {
+      opacity: 0.4;
+    }
+    60% {
+      opacity: 0.4;
+    }
+    100% {
+      transform: translateX(100%) rotate(25deg);
+      opacity: 0;
+    }
+  }
+  
+  
+  .title {
+    color: white;
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+  }
+  
+  .input {
+    background-color: #222;
+    border: none;
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    font-size: 1rem;
+    color: white;
+    margin-bottom: 1rem;
+    width: 100%;
+  }
+  
+  .input::placeholder {
+    color: #aaa;
+  }
+  
+  .button {
+    background-color: #0073ff;
+    color: white;
+    padding: 0.85rem;
+    border-radius: 8px;
+    border: none;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    width: 100%;
+    transition: background-color 0.3s;
+  }
+  
+  .button:hover {
+    background-color: #005ed6;
+  }
+  
+  .passwordField {
+    position: relative;
+    width: 100%;
+  }
+  
+  .eyeToggle {
+    position: absolute;
+    top: 40%;
+    right: 1rem;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #aaa;
+    padding: 0;
+    z-index: 2;
+  }
+  
+  .eyeToggle:hover {
+    color: white;
+  }
+  
+  .eyeToggle:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+  
+  .rememberRow {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+  }
+  
+  .rememberLabel {
+    font-size: 0.95rem;
+    color: #ccc;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .checkbox {
+    accent-color: #0073ff;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+  }  
+  
+  /* =================== RESPONSIVE =================== */
+
+@media (max-width: 1024px) {
+    .title {
+      font-size: 1.6rem;
+    }
+  
+    .input,
+    .button {
+      font-size: 0.95rem;
+      padding: 0.8rem;
+    }
+  
+    .form {
+      padding: 1.8rem;
+    }
+  
+    .brandText {
+      font-size: 1.5rem;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .loginPage {
+      padding: 1.5rem;
+    }
+  
+    .formWrapper {
+      padding: 1rem;
+    }
+  
+    .form {
+      padding: 1.5rem;
+      max-width: 90%;
+    }
+  
+    .title {
+      font-size: 1.5rem;
+    }
+  
+    .input,
+    .button {
+      font-size: 0.9rem;
+      padding: 0.75rem;
+    }
+  
+    .brandText {
+      font-size: 1.4rem;
+    }
+  
+    .navbarLeft {
+      top: 1rem;
+      left: 1.2rem;
+    }
+  
+    .logo {
+      height: 26px;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .form {
+      padding: 1.2rem;
+    }
+  
+    .title {
+      font-size: 1.4rem;
+    }
+  
+    .input,
+    .button {
+      font-size: 0.85rem;
+      padding: 0.7rem;
+    }
+  
+    .brandText {
+      font-size: 1.2rem;
+    }
+  
+    .logo {
+      height: 24px;
+    }
+  
+    .navbarLeft {
+      top: 0.8rem;
+      left: 1rem;
+    }
+    .rememberLabel {
+    font-size: 0.85rem;
+    gap: 0.4rem;
+    }
+
+    .checkbox {
+    width: 14px;
+    height: 14px;
+    }
+  }
+  

@@ -1,12 +1,12 @@
-// src/App.tsx
 import { Routes, Route } from 'react-router-dom'
 import LandingPage from './pages/LandingPage'
-// import Dashboard from './pages/Dashboard' // coming soon
+import Login from './pages/authentication/Login'
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<Login />} />
     </Routes>
   )
 }
