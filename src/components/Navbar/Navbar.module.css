@@ -1,0 +1,65 @@
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2rem;
+  color: white;
+  background: transparent;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 50; /* make sure it sits above hero */
+}
+
+.navbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-left: 7rem;
+  cursor: pointer;
+}
+
+.logo {
+  height: 30px;
+}
+
+.brandText {
+  font-size: 1.6rem;
+  font-weight: 500;
+}
+
+.navbarLinks {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2rem;
+  list-style: none;
+}
+
+.navbarLinks a {
+  text-decoration: none;
+  color: white;
+  font-size: 0.95rem;
+  transition: color 0.3s ease;
+}
+
+.navbarLinks a:hover {
+  color: #e5e7eb;
+}
+
+.loginButton {
+  background-color: #0073FF;
+  color: white;
+  padding: 0.5rem 1.25rem;
+  border-radius: 9999px;
+  font-size: 1rem;
+  text-decoration: none;
+  transition: background-color 0.3s ease;
+  margin-right: 7rem;
+}
+
+.loginButton:hover {
+  background-color: #005ed6;
+}

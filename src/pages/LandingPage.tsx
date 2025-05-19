@@ -1,10 +1,10 @@
-import Navbar from '../components/Navbar'
+import Hero from '../components/Hero/Hero'
 
 
 const HomePage = () => {
   return (
-    <div className="bg-black text-white">
-      <Navbar />
+    <div>
+      <Hero />
     </div>
   )
 }
