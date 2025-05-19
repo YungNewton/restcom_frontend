@@ -5,7 +5,7 @@ import { Eye, EyeOff } from 'lucide-react'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 const LoginForm = () => {
-  const [form, setForm] = useState({ user: '', password: '' })
+  const [form, setForm] = useState({ identifier: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
 
@@ -16,21 +16,28 @@ const LoginForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      const res = await fetch(`${API_BASE_URL}/auth/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          email: form.identifier,
+          password: form.password,
+          remember_me: rememberMe,
+        }),
       })
 
       const data = await res.json()
 
       if (res.ok) {
         const storage = rememberMe ? localStorage : sessionStorage
-        storage.setItem('authToken', data.token) // adjust key as needed
+        storage.setItem('authToken', data.access)
+        storage.setItem('refreshToken', data.refresh)
+        storage.setItem('userEmail', data.user.email)
+        storage.setItem('username', data.user.username)
         console.log('Login success:', data)
-        // redirect to dashboard or do something useful
+        // redirect or update UI
       } else {
-        console.error('Login failed:', data.message || 'Unknown error')
+        console.error('Login failed:', data.error || 'Unknown error')
       }
     } catch (err) {
       console.error('Network error:', err)
@@ -43,9 +50,9 @@ const LoginForm = () => {
 
       <input
         type="text"
-        name="user"
+        name="identifier"
         placeholder="Email or Username"
-        value={form.user}
+        value={form.identifier}
         onChange={handleChange}
         required
         className={styles.input}
