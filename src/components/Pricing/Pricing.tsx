@@ -24,7 +24,7 @@ const plans = [
 
 const Pricing = () => {
   return (
-    <section className={styles.pricingSection}>
+    <section id="pricing" className={styles.pricingSection}>
       <h2 className={styles.heading}>Plans for every Creator</h2>
       <p className={styles.subtext}>
         14 days unlimited free trial, choose from a variety of plans that fit your category

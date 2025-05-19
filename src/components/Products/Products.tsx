@@ -19,7 +19,7 @@ const Products = () => {
   }, [])
 
   return (
-    <section className={styles.products}>
+    <section id="product" className={styles.products}>
       <div className={styles.textCenter}>
         <h2 className={styles.heading}>Powering Progress<br />Through Sustainability</h2>
         <p className={styles.subtext}>
