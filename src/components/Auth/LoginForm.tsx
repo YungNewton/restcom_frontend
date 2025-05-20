@@ -1,10 +1,16 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import styles from './Login.module.css'
 import { Eye, EyeOff } from 'lucide-react'
+import { toast } from 'react-hot-toast'
+import { useAuth } from '../../context/AuthContext'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 const LoginForm = () => {
+  const navigate = useNavigate()
+  const { login } = useAuth()
+
   const [form, setForm] = useState({ identifier: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
@@ -30,17 +36,20 @@ const LoginForm = () => {
 
       if (res.ok) {
         const storage = rememberMe ? localStorage : sessionStorage
-        storage.setItem('authToken', data.access)
         storage.setItem('refreshToken', data.refresh)
         storage.setItem('userEmail', data.user.email)
         storage.setItem('username', data.user.username)
-        console.log('Login success:', data)
-        // redirect or update UI
+
+        // Call login() from context
+        login({ token: data.access, remember: rememberMe })
+
+        toast.success('Login successful!')
+        navigate('/')
       } else {
-        console.error('Login failed:', data.error || 'Unknown error')
+        toast.error(data.error || 'Login failed. Try again.')
       }
     } catch (err) {
-      console.error('Network error:', err)
+      toast.error('Network error. Please try again.')
     }
   }
 

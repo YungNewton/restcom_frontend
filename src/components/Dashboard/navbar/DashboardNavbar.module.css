@@ -1,0 +1,144 @@
+.navbar {
+    width: calc(100% - 1.5rem);
+    margin: 1rem auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.2rem 2rem;
+    background-color: #1a1a1a;
+    border-radius: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    color: white;
+  }
+  
+  
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: pointer;
+  }
+  
+  .logo {
+    height: 24px;
+  }
+  
+  .brandText {
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: white;
+  }
+  
+  .center {
+    flex-grow: 1;
+    max-width: 400px;
+    margin: 0 2rem;
+  }
+  
+  .searchWrapper {
+    position: relative;
+    width: 100%;
+  }
+  
+  .searchIcon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #ccc;
+    width: 18px;
+    height: 18px;
+  }
+  
+  .searchInput {
+    width: 100%;
+    padding: 0.6rem 1rem 0.6rem 2.5rem;
+    border-radius: 0.5rem;
+    background-color: #2b2b2b;
+    color: white;
+    border: none;
+    outline: none;
+    font-size: 0.95rem;
+  }
+  
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .newProjectButton {
+    background: transparent;
+    border: 1px solid #555;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    color: white;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.2s ease;
+  }
+  
+  .newProjectButton:hover {
+    background-color: #333;
+  }
+  
+  .icon {
+    color: white;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+  }
+  
+  .avatarWrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+  }
+  
+  .avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  
+  @media (max-width: 768px) {
+    .center {
+      display: none;
+    }
+  
+    .navbar {
+      padding: 1rem 1.2rem;
+      gap: 1rem;
+    }
+  
+    .newProjectButton {
+      padding: 0.4rem 0.75rem;
+      font-size: 0.85rem;
+    }
+  
+    .brandText {
+      font-size: 1.1rem;
+    }
+  
+    .avatar {
+      width: 28px;
+      height: 28px;
+    }
+  
+    .icon {
+      width: 18px;
+      height: 18px;
+    }
+  }
+
+  @media (max-width: 460px) {
+    .newProjectButton {
+      display: none;
+    }
+  }
+  
