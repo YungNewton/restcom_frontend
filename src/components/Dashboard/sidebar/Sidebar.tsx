@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import styles from './Sidebar.module.css'
 import {
   LayoutDashboard,
@@ -11,56 +12,90 @@ import {
   HelpCircle,
   LogOut
 } from 'lucide-react'
+import { useAuth } from '../../../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
 
-const Sidebar = () => {
+type SidebarProps = {
+  activePath: string
+}
+
+const Sidebar = ({ activePath }: SidebarProps) => {
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+  const [isOpen, setIsOpen] = useState(false)
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  const isActive = (path: string) => activePath === path
+  const handleNav = (path: string) => {
+    navigate(path)
+    setIsOpen(false)
+  }
+
   return (
-    <aside className={styles.sidebar}>
-      <ul className={styles.navList}>
-        <li className={`${styles.navItem} ${styles.active}`}>
-          <LayoutDashboard size={18} />
-          <span>Dashboard</span>
-        </li>
-        <li className={styles.navItem}>
-          <Mail size={18} />
-          <span>Email Assistant</span>
-        </li>
-        <li className={styles.navItem}>
-          <Mic size={18} />
-          <span>Voice & TTS</span>
-        </li>
-        <li className={styles.navItem}>
-          <Video size={18} />
-          <span>Video Generator</span>
-        </li>
-        <li className={styles.navItem}>
-          <Shapes size={18} />
-          <span>Logo Generator</span>
-        </li>
-        <li className={styles.navItem}>
-          <Folder size={18} />
-          <span>Projects</span>
-        </li>
-        <li className={styles.navItem}>
-          <Info size={18} />
-          <span>Reports</span>
-        </li>
-        <li className={styles.navItem}>
-          <Sliders size={18} />
-          <span>Settings</span>
-        </li>
-      </ul>
-
-      <div className={styles.footer}>
-        <div className={styles.navItem}>
-          <HelpCircle size={18} />
-          <span>Help</span>
-        </div>
-        <button className={styles.logoutButton}>
-          <LogOut size={18} />
-          <span>Log out</span>
-        </button>
+    <>
+      {/* Hamburger for mobile */}
+      <div className={styles.hamburger} onClick={() => setIsOpen(true)}>
+        <div></div>
+        <div></div>
+        <div></div>
       </div>
-    </aside>
+
+      {/* Sidebar */}
+      <aside className={`${styles.sidebar} ${isOpen ? styles.open : ''}`}>
+        <ul className={styles.navList}>
+          <li className={`${styles.navItem} ${isActive('/dashboard') ? styles.active : ''}`} onClick={() => handleNav('/dashboard')}>
+            <LayoutDashboard size={18} />
+            <span>Dashboard</span>
+          </li>
+          <li className={`${styles.navItem} ${isActive('/email-assistant') ? styles.active : ''}`} onClick={() => handleNav('/email-assistant')}>
+            <Mail size={18} />
+            <span>Email Assistant</span>
+          </li>
+          <li className={`${styles.navItem} ${isActive('/voice') ? styles.active : ''}`} onClick={() => handleNav('/voice')}>
+            <Mic size={18} />
+            <span>Voice & TTS</span>
+          </li>
+          <li className={`${styles.navItem} ${isActive('/video') ? styles.active : ''}`} onClick={() => handleNav('/video')}>
+            <Video size={18} />
+            <span>Video Generator</span>
+          </li>
+          <li className={`${styles.navItem} ${isActive('/logo') ? styles.active : ''}`} onClick={() => handleNav('/logo')}>
+            <Shapes size={18} />
+            <span>Logo Generator</span>
+          </li>
+          <li className={`${styles.navItem} ${isActive('/projects') ? styles.active : ''}`} onClick={() => handleNav('/projects')}>
+            <Folder size={18} />
+            <span>Projects</span>
+          </li>
+          <li className={`${styles.navItem} ${isActive('/reports') ? styles.active : ''}`} onClick={() => handleNav('/reports')}>
+            <Info size={18} />
+            <span>Reports</span>
+          </li>
+          <li className={`${styles.navItem} ${isActive('/settings') ? styles.active : ''}`} onClick={() => handleNav('/settings')}>
+            <Sliders size={18} />
+            <span>Settings</span>
+          </li>
+        </ul>
+
+        <div className={styles.footer}>
+          <div className={styles.navItem}>
+            <HelpCircle size={18} />
+            <span>Help</span>
+          </div>
+          <button className={styles.logoutButton} onClick={handleLogout}>
+            <LogOut size={18} />
+            <span>Log out</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Overlay */}
+      {isOpen && <div className={styles.overlay} onClick={() => setIsOpen(false)}></div>}
+    </>
   )
 }
 

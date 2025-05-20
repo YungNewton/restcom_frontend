@@ -7,7 +7,7 @@ const Dashboard = () => {
   return (
     <div className={styles.dashboard}>
       <Navbar />
-      <Sidebar />
+      <Sidebar activePath={location.pathname} />
     </div>
   )
 }
