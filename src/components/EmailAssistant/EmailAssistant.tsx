@@ -5,6 +5,8 @@ import sparkleIcon from '../../assets/sparkle-icon.png'
 import playIcon from '../../assets/play.png'
 import uploadIcon from '../../assets/upload.png'
 import { CircleStop } from 'lucide-react';
+import ReactMarkdown from 'react-markdown'
+import rehypeSanitize from 'rehype-sanitize'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 const defaultPrompts = [
@@ -95,11 +97,16 @@ const EmailAssistant = () => {
         }
       }, speed)
   
-      setConversationHistory(prev => [
-        ...prev,
-        { role: 'user', content: currentPrompt },
-        { role: 'assistant', content: fullResponse }
-      ])
+      setConversationHistory(prev => {
+        const updated = [
+          ...prev,
+          { role: 'user', content: currentPrompt },
+          { role: 'assistant', content: fullResponse }
+        ]
+      
+        const last10 = updated.slice(-10)
+        return last10
+      })      
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         setAiResponse('Request cancelled.')
@@ -177,7 +184,11 @@ const EmailAssistant = () => {
               </div>
 
               <div className={styles.aiResponse} ref={responseRef}>
-                <div>{aiResponse}</div>
+                <div className={styles.responseContent}>
+                  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+                    {aiResponse}
+                  </ReactMarkdown>
+                </div>
                 <div className={styles.responseActions}>
                   <RefreshCcw size={20} className={styles.icon} />
                   <div className={styles.rightActions}>
