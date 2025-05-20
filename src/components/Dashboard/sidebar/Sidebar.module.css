@@ -69,12 +69,6 @@
   background-color: #2b2b2b;
 }
 
-/* ===== Burger Menu Wrapper ===== */
-.burgerWrapper {
-  width: 220px;
-  margin: 1rem;
-}
-
 /* Hide burger when sidebar is open */
 .hidden {
   display: none;
@@ -83,10 +77,11 @@
 /* ===== Responsive / Mobile ===== */
 @media (max-width: 768px) {
   .burgerWrapper {
+    display: flex;
     width: auto;
     margin: 1rem;
   }
-
+  
   .hamburger {
     display: flex;
     flex-direction: column;

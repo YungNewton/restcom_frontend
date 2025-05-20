@@ -1,4 +1,21 @@
 body {
-    background-color: black;
-    color: white;
+background-color: black;
+}
+
+.dashboard {
+display: flex;
+flex-direction: column;
+}
+
+.main {
+display: flex;
+flex: 1;
+overflow: hidden;
+}
+
+/* On mobile: stack vertically */
+@media (max-width: 768px) {
+    .main {
+      flex-direction: column;
+    }
   }
