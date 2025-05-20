@@ -22,6 +22,7 @@ function App() {
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
         />
         <Route path="/dashboard" element={<ProtectedRoute Component={Dashboard} />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   )

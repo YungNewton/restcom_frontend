@@ -37,11 +37,13 @@ const Sidebar = ({ activePath }: SidebarProps) => {
 
   return (
     <>
-      {/* Hamburger for mobile */}
-      <div className={styles.hamburger} onClick={() => setIsOpen(true)}>
-        <div></div>
-        <div></div>
-        <div></div>
+      {/* Burger menu — hidden when sidebar is open */}
+      <div className={`${styles.burgerWrapper} ${isOpen ? styles.hidden : ''}`}>
+        <div className={styles.hamburger} onClick={() => setIsOpen(true)}>
+          <div></div>
+          <div></div>
+          <div></div>
+        </div>
       </div>
 
       {/* Sidebar */}
@@ -93,8 +95,8 @@ const Sidebar = ({ activePath }: SidebarProps) => {
         </div>
       </aside>
 
-      {/* Overlay */}
-      {isOpen && <div className={styles.overlay} onClick={() => setIsOpen(false)}></div>}
+      {/* Overlay for small screen */}
+      {isOpen && <div className={styles.overlay} onClick={() => setIsOpen(false)} />}
     </>
   )
 }
