@@ -151,8 +151,16 @@
     width: 22px;
     height: 22px;
     cursor: pointer;
+    transition: transform 0.25s ease, filter 0.25s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  
+  .playBtn:hover {
+    transform: scale(1.15) rotate(5deg);
+    filter: brightness(1.3);
+  }  
+
   .promptSuggestions {
     display: flex;
     overflow-x: auto;
@@ -177,8 +185,14 @@
     cursor: pointer;
     white-space: nowrap;
     text-align: left;
-    transition: background 0.2s ease;
+    transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
   }
+  
+  .promptSuggestions button:hover {
+    background-color: #333;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+  }  
   
   .aiResponse {
     background-color: #2a2a2a;
