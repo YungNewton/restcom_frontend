@@ -26,8 +26,31 @@ const EmailAssistant = () => {
   const [isTyping, setIsTyping] = useState(false)
   const [conversationHistory, setConversationHistory] = useState<any[]>([])
   const [controller, setController] = useState<AbortController | null>(null)
+  const [copyTooltip, setCopyTooltip] = useState('Copy to Clipboard')
 
   const responseRef = useRef<HTMLDivElement>(null)
+  const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const [lastPrompt, setLastPrompt] = useState('')
+
+  const handleRegenerate = () => {
+    if (isTyping) return
+    if (!lastPrompt.trim()) return
+    setAskInput(lastPrompt)
+    sendPrompt(lastPrompt)
+  
+  }
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(aiResponse)
+      setCopyTooltip('Copied!')
+      setTimeout(() => setCopyTooltip('Copy to Clipboard'), 2000)
+    } catch (err) {
+      setCopyTooltip('Failed to copy')
+      setTimeout(() => setCopyTooltip('Copy to Clipboard'), 2000)
+    }
+  }  
 
   useEffect(() => {
     const fetchPrompts = async () => {
@@ -44,17 +67,25 @@ const EmailAssistant = () => {
     fetchPrompts()
   }, [])
 
-  const handleAsk = async () => {
+  const sendPrompt = async (prompt: string) => {
     if (isTyping) {
       controller?.abort()
+      if (typingIntervalRef.current) {
+        clearInterval(typingIntervalRef.current)
+        typingIntervalRef.current = null
+      }
       setIsTyping(false)
       setAskInput('')
       return
     }
   
-    if (!askInput.trim()) return
+    if (!prompt.trim()) return
   
-    const currentPrompt = askInput.trim()
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current)
+      typingIntervalRef.current = null
+    }
+  
     setAiResponse('')
     setIsTyping(true)
     setAskInput('AI is thinking')
@@ -70,11 +101,12 @@ const EmailAssistant = () => {
     setController(abortController)
   
     try {
+      setLastPrompt(prompt)
       const res = await fetch(`${API_BASE_URL}/emails/generate-ai-email/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: currentPrompt,
+          prompt,
           history: conversationHistory
         }),
         signal: abortController.signal
@@ -84,29 +116,31 @@ const EmailAssistant = () => {
       const fullResponse = data.response || 'No response.'
   
       let index = -1
-      const speed = 25
-      const interval = setInterval(() => {
+      setAiResponse('') // clear before typing
+      const speed = 8
+
+      const typeChar = () => {
         if (index < fullResponse.length) {
-          setAiResponse(prev => prev + fullResponse[index])
+          setAiResponse(prev => prev + fullResponse.charAt(index))
           index++
+          typingIntervalRef.current = setTimeout(typeChar, speed)
         } else {
-          clearInterval(interval)
           clearInterval(animateDots)
           setIsTyping(false)
           setAskInput('')
         }
-      }, speed)
+      }
+
+      typeChar()
   
       setConversationHistory(prev => {
         const updated = [
           ...prev,
-          { role: 'user', content: currentPrompt },
+          { role: 'user', content: prompt },
           { role: 'assistant', content: fullResponse }
         ]
-      
-        const last10 = updated.slice(-10)
-        return last10
-      })      
+        return updated.slice(-10)
+      })
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         setAiResponse('Request cancelled.')
@@ -115,12 +149,14 @@ const EmailAssistant = () => {
       } else {
         setAiResponse('Unknown error occurred.')
       }
-    }     finally {
-      clearInterval(animateDots)
-      setIsTyping(false)
-      setAskInput('')
+    } finally {
       setController(null)
     }
+  }
+  
+  const handleAsk = () => {
+    if (!askInput.trim()) return
+    sendPrompt(askInput.trim())
   }  
 
   return (
@@ -157,6 +193,12 @@ const EmailAssistant = () => {
                   placeholder="Ask anything..."
                   value={askInput}
                   onChange={(e) => setAskInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleAsk()
+                    }
+                  }}
                 />
                 {isTyping ? (
                   <CircleStop
@@ -190,10 +232,23 @@ const EmailAssistant = () => {
                   </ReactMarkdown>
                 </div>
                 <div className={styles.responseActions}>
-                  <RefreshCcw size={20} className={styles.icon} />
+                  <div className={styles.leftActions}>
+                    <div className={styles.tooltipWrapper} data-tooltip="Regenerate">
+                      <RefreshCcw
+                        size={20}
+                        className={`${styles.icon} ${isTyping ? styles.disabledIcon : ''}`}
+                        onClick={handleRegenerate}
+                      />
+                    </div>
+                  </div>
+
                   <div className={styles.rightActions}>
-                    <Copy size={20} className={styles.icon} />
-                    <Mail size={20} className={styles.icon} />
+                    <div className={styles.tooltipWrapper} data-tooltip={copyTooltip}>
+                      <Copy size={20} className={styles.icon} onClick={handleCopy} />
+                    </div>
+                    <div className={styles.tooltipWrapper} data-tooltip="Insert into Mail (coming soon)">
+                      <Mail size={20} className={styles.icon} />
+                    </div>
                   </div>
                 </div>
               </div>
