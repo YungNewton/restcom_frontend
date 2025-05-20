@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast'
 import LandingPage from './pages/LandingPage'
 import Login from './pages/authentication/Login'
 import Dashboard from './pages/dashboard/Dashboard'
+import EmailAssistantTool from './pages/tools/EmailAssistant'
 import ProtectedRoute from './routes/ProtectedRoute'
 import { useAuth } from './context/AuthContext'
 
@@ -22,6 +23,7 @@ function App() {
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
         />
         <Route path="/dashboard" element={<ProtectedRoute Component={Dashboard} />} />
+        <Route path="/email-assistant" element={<ProtectedRoute Component={EmailAssistantTool} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
@@ -29,5 +31,3 @@ function App() {
 }
 
 export default App
-
-

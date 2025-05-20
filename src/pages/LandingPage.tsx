@@ -1,7 +1,7 @@
 import Hero from '../components/Hero/Hero'
 import Products from '../components/Products/Products'
 import Pricing from '../components/Pricing/Pricing'
-import Contact from '../components/Contact/Contact'
+import Contact from '../components/contact/Contact'
 import Footer from '../components/Footer/Footer'
 
 const HomePage = () => {

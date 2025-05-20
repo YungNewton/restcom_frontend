@@ -12,6 +12,7 @@
   box-sizing: border-box;
   transition: left 0.3s ease;
   z-index: 1000;
+  height: 82vh;
 }
 
 .navList {
@@ -81,7 +82,7 @@
     width: auto;
     margin: 1rem;
   }
-  
+
   .hamburger {
     display: flex;
     flex-direction: column;
