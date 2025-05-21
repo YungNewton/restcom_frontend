@@ -79,36 +79,30 @@ const EmailAssistant = () => {
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [lastPrompt, setLastPrompt] = useState('')
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [recipientsFile, setRecipientsFile] = useState<File | null>(null);
   const [emailTaskId, setEmailTaskId] = useState<string | null>(null)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
-
-
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleSendEmails = async () => {
     const subject = subjectRef.current?.value?.trim();
     const message = messageRef.current?.value?.trim();
   
-    if (!uploadedFile) {
-      toast.error("Please upload a file.");
-      return;
-    }
-  
-    if (!subject) {
-      toast.error("Subject is required.");
-      return;
-    }
-  
-    if (!message) {
-      toast.error("Message is required.");
-      return;
-    }
+    if (!recipientsFile) return toast.error("Please upload a recipient list.");
+    if (!subject) return toast.error("Subject is required.");
+    if (!message) return toast.error("Message is required.");
   
     const formData = new FormData();
-    formData.append("file", uploadedFile);
+    formData.append("file", recipientsFile);
+    if (attachmentFile) {
+      formData.append("attachment", attachmentFile);
+    }
     formData.append("subject", subject);
     formData.append("message", message);
   
+    setIsSendingEmails(true);
+    setEmailTaskId(null);
     const toastId = toast.loading("Sending emails...");
   
     try {
@@ -120,17 +114,59 @@ const EmailAssistant = () => {
       const data = await res.json();
   
       if (res.ok) {
-        toast.success(
-          `Sent: ${data.success_count}, Failed: ${data.failed_count}`,
-          { id: toastId }
-        );
+        setEmailTaskId(data.task_id);
+        toast.success("Email job started.", { id: toastId });
+        pollTaskStatus(data.task_id);
       } else {
+        setIsSendingEmails(false);
         toast.error(data.error || "Failed to send emails.", { id: toastId });
       }
     } catch (err) {
-      console.error("Bulk email error:", err);
+      setIsSendingEmails(false);
       toast.error("Something went wrong while sending emails.", { id: toastId });
     }
+  };
+  
+  const handleCancelEmailTask = async () => {
+    if (!emailTaskId) return;
+  
+    try {
+      await fetch(`${API_BASE_URL}/cancel-task/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_id: emailTaskId }),
+      });
+  
+      toast.success("Email task cancelled.");
+    } catch (err) {
+      toast.error("Failed to cancel task.");
+    } finally {
+      setIsSendingEmails(false);
+      setEmailTaskId(null);
+    }
+  }; 
+  
+  const pollTaskStatus = (taskId: string) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+  
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/task-status/${taskId}`);
+        const data = await res.json();
+  
+        if (data.state === "SUCCESS" || data.state === "FAILURE" || data.state === "REVOKED") {
+          toast.success(`Task ${data.state.toLowerCase()}.`);
+          setIsSendingEmails(false);
+          setEmailTaskId(null);
+  
+          clearInterval(pollIntervalRef.current!);
+          pollIntervalRef.current = null;
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+        // Optional: Retry count limit or notify user
+      }
+    }, 1000);
   };  
   
   const handleRegenerate = () => {
@@ -164,7 +200,12 @@ const EmailAssistant = () => {
     setTimeout(() => setInsertTooltip("Insert into Mail"), 2000);
   };
   
-
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
+  
   useEffect(() => {
     const fetchPrompts = async () => {
       try {
@@ -391,33 +432,56 @@ const EmailAssistant = () => {
             <label className={styles.uploadArea}>
               <input
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".pdf,.docx,.jpg,.png"
                 multiple={false}
                 style={{ display: 'none' }}
                 onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    setUploadedFile(e.target.files[0]);
+                  const file = e.target.files?.[0];
+                  if (file && file.size > 5 * 1024 * 1024) {
+                    toast.error("Attachment must be under 5MB.");
+                    return;
                   }
-                }}
+                  if (file) {
+                    setAttachmentFile(file);
+                  }
+                }}                
               />
               <img src={uploadIcon} alt="upload" className={styles.uploadIcon} />
-              <p className={styles.fileHint} title={uploadedFile?.name}>
-                <span className={styles.truncateText}>
-                  {uploadedFile
-                    ? uploadedFile.name.length > 40
-                      ? uploadedFile.name.slice(0, 37) + "..."
-                      : uploadedFile.name
-                    : ".csv or .xlsx"}
-                </span>
+              <p className={styles.fileHint} title={attachmentFile?.name}>
+                {attachmentFile?.name || "Attachment (.pdf, .jpg, etc)"}
               </p>
-              <p className={styles.fileHint}>click to upload or drag and drop</p>
             </label>
           </div>
 
-          <button className={styles.sendBtn} onClick={handleSendEmails}>
-            <Send size={16} />
-            <span>Send</span>
-          </button>
+          <div className={styles.attachmentBox}>
+            <p className={styles.attachmentTitle}>Recipient List (.csv)</p>
+            <label className={styles.uploadArea}>
+              <input
+                type="file"
+                accept=".csv,.xlsx"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setRecipientsFile(file);
+                }}
+              />
+              <img src={uploadIcon} alt="upload" className={styles.uploadIcon} />
+              <p className={styles.fileHint} title={recipientsFile?.name}>
+                {recipientsFile?.name || "Upload .csv with emails"}
+              </p>
+            </label>
+          </div>
+          {isSendingEmails ? (
+            <button className={styles.sendBtn} onClick={handleCancelEmailTask}>
+              <div className={styles.spinner} />
+              <span>Cancel</span>
+            </button>
+          ) : (
+            <button className={styles.sendBtn} onClick={handleSendEmails}>
+              <Send size={16} />
+              <span>Send</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
