@@ -79,7 +79,7 @@ const EmailAssistant = () => {
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [lastPrompt, setLastPrompt] = useState('')
-  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [recipientsFile, setRecipientsFile] = useState<File | null>(null);
   const [emailTaskId, setEmailTaskId] = useState<string | null>(null)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
@@ -95,9 +95,9 @@ const EmailAssistant = () => {
   
     const formData = new FormData();
     formData.append("file", recipientsFile);
-    if (attachmentFile) {
-      formData.append("attachment", attachmentFile);
-    }
+    attachmentFiles.forEach((file, i) => {
+      formData.append(`attachment_${i}`, file);
+    });    
     formData.append("subject", subject);
     formData.append("message", message);
   
@@ -143,6 +143,11 @@ const EmailAssistant = () => {
     } finally {
       setIsSendingEmails(false);
       setEmailTaskId(null);
+
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }      
     }
   }; 
   
@@ -430,35 +435,36 @@ const EmailAssistant = () => {
           <div className={styles.attachmentBox}>
             <p className={styles.attachmentTitle}>Attachment</p>
             <label className={styles.uploadArea}>
-              <input
-                type="file"
-                accept=".pdf,.docx,.jpg,.png"
-                multiple={false}
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file && file.size > 5 * 1024 * 1024) {
-                    toast.error("Attachment must be under 5MB.");
-                    return;
-                  }
-                  if (file) {
-                    setAttachmentFile(file);
-                  }
-                }}                
-              />
+            <input
+              type="file"
+              accept=".pdf,.docx,.jpg,.png"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+                if (totalSize > 5 * 1024 * 1024) {
+                  toast.error("Total attachment size must be under 5MB.");
+                  return;
+                }
+                setAttachmentFiles(files);
+              }}
+            />
               <img src={uploadIcon} alt="upload" className={styles.uploadIcon} />
-              <p className={styles.fileHint} title={attachmentFile?.name}>
-                {attachmentFile?.name || "Attachment (.pdf, .jpg, etc)"}
+              <p className={styles.fileHint}>
+                {attachmentFiles.length > 0
+                  ? `${attachmentFiles.length} file${attachmentFiles.length > 1 ? 's' : ''} selected`
+                  : "Attachment (.pdf, .jpg, etc)"}
               </p>
             </label>
           </div>
 
           <div className={styles.attachmentBox}>
-            <p className={styles.attachmentTitle}>Recipient List (.csv)</p>
-            <label className={styles.uploadArea}>
+            <p className={styles.attachmentTitle}>Recipient List (.csv, .xlsx)</p>
+            <label className={`${styles.uploadArea} ${styles.uploadAreaThin}`}>
               <input
                 type="file"
-                accept=".csv,.xlsx"
+                accept=".csv,.xlsx,.xls"
                 style={{ display: 'none' }}
                 onChange={(e) => {
                   const file = e.target.files?.[0];

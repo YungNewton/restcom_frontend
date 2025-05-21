@@ -399,6 +399,26 @@
   margin-right: 0.5rem;
 }
 
+.uploadAreaThin {
+  max-height: 80px;
+  padding: 0.5rem 0.8rem;
+  border: 1px dashed #444;
+  background-color: #111;
+  justify-content: center;
+}
+
+.uploadAreaThin .uploadIcon {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 0.3rem;
+}
+
+.uploadAreaThin .fileHint {
+  font-size: 0.78rem;
+  color: #bbb;
+  text-align: center;
+}
+
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
