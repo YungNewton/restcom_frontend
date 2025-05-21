@@ -7,6 +7,8 @@ import uploadIcon from '../../assets/upload.png'
 import { CircleStop } from 'lucide-react';
 import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
+import removeMarkdown from 'remove-markdown'
+import { toast } from 'react-hot-toast'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 const defaultPrompts = [
@@ -18,6 +20,48 @@ const defaultPrompts = [
   "Suggest an upsell follow-up"
 ]
 
+function forceCleanMarkdown(text: string) {
+  return removeMarkdown(text.replace(/^\*{1,2}\s*/, "").replace(/\*{1,2}$/, "").trim())
+}
+
+function extractSubjectAndBody(rawText: string) {
+  const lines = rawText.split("\n");
+  let subject = "";
+  const bodyLines: string[] = [];
+  let foundSubject = false;
+  let isInBody = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const normalized = trimmed.toLowerCase();
+
+    if (!foundSubject && /^(\*\*)?\s*subject\s*:/i.test(trimmed)) {
+      const withoutPrefix = trimmed.replace(/^(\*\*)?\s*subject\s*:\s*/i, "")
+      subject = forceCleanMarkdown(withoutPrefix).trim()
+      foundSubject = true
+      continue
+    }
+
+    if (normalized.startsWith("body:")) {
+      isInBody = true;
+      continue;
+    }
+
+    if (foundSubject && !isInBody && trimmed !== "") {
+      isInBody = true;
+    }
+
+    if (isInBody) {
+      if (/^[A-Z][a-z]+:/.test(trimmed) && !normalized.startsWith("p.s.")) break;
+      bodyLines.push(line);
+    }
+  }
+
+  const body = forceCleanMarkdown(bodyLines.join("\n")).trim();
+  return { subject, body };
+}
+
 const EmailAssistant = () => {
   const [aiExpanded, setAiExpanded] = useState(true)
   const [prompts, setPrompts] = useState<string[]>([])
@@ -26,13 +70,69 @@ const EmailAssistant = () => {
   const [isTyping, setIsTyping] = useState(false)
   const [conversationHistory, setConversationHistory] = useState<any[]>([])
   const [controller, setController] = useState<AbortController | null>(null)
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+  const [insertTooltip, setInsertTooltip] = useState("Insert into Mail");
   const [copyTooltip, setCopyTooltip] = useState('Copy to Clipboard')
 
   const responseRef = useRef<HTMLDivElement>(null)
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [lastPrompt, setLastPrompt] = useState('')
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [emailTaskId, setEmailTaskId] = useState<string | null>(null)
+  const [isSendingEmails, setIsSendingEmails] = useState(false)
 
+
+
+  const handleSendEmails = async () => {
+    const subject = subjectRef.current?.value?.trim();
+    const message = messageRef.current?.value?.trim();
+  
+    if (!uploadedFile) {
+      toast.error("Please upload a file.");
+      return;
+    }
+  
+    if (!subject) {
+      toast.error("Subject is required.");
+      return;
+    }
+  
+    if (!message) {
+      toast.error("Message is required.");
+      return;
+    }
+  
+    const formData = new FormData();
+    formData.append("file", uploadedFile);
+    formData.append("subject", subject);
+    formData.append("message", message);
+  
+    const toastId = toast.loading("Sending emails...");
+  
+    try {
+      const res = await fetch(`${API_BASE_URL}/emails/send-bulk/`, {
+        method: "POST",
+        body: formData,
+      });
+  
+      const data = await res.json();
+  
+      if (res.ok) {
+        toast.success(
+          `Sent: ${data.success_count}, Failed: ${data.failed_count}`,
+          { id: toastId }
+        );
+      } else {
+        toast.error(data.error || "Failed to send emails.", { id: toastId });
+      }
+    } catch (err) {
+      console.error("Bulk email error:", err);
+      toast.error("Something went wrong while sending emails.", { id: toastId });
+    }
+  };  
+  
   const handleRegenerate = () => {
     if (isTyping) return
     if (!lastPrompt.trim()) return
@@ -43,14 +143,27 @@ const EmailAssistant = () => {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(aiResponse)
-      setCopyTooltip('Copied!')
-      setTimeout(() => setCopyTooltip('Copy to Clipboard'), 2000)
+      const cleaned = forceCleanMarkdown(aiResponse); 
+      await navigator.clipboard.writeText(cleaned); 
+      setCopyTooltip('Copied!');
+      setTimeout(() => setCopyTooltip('Copy to Clipboard'), 2000);
     } catch (err) {
-      setCopyTooltip('Failed to copy')
-      setTimeout(() => setCopyTooltip('Copy to Clipboard'), 2000)
+      setCopyTooltip('Failed to copy');
+      setTimeout(() => setCopyTooltip('Copy to Clipboard'), 2000);
     }
-  }  
+  };  
+
+  const handleInsertIntoMail = () => {
+    if (!aiResponse) return;
+    const { subject, body } = extractSubjectAndBody(aiResponse);
+  
+    if (subjectRef.current) subjectRef.current.value = removeMarkdown(subject);
+    if (messageRef.current) messageRef.current.value = removeMarkdown(body);
+  
+    setInsertTooltip("Inserted!");
+    setTimeout(() => setInsertTooltip("Insert into Mail"), 2000);
+  };
+  
 
   useEffect(() => {
     const fetchPrompts = async () => {
@@ -246,7 +359,11 @@ const EmailAssistant = () => {
                     <div className={styles.tooltipWrapper} data-tooltip={copyTooltip}>
                       <Copy size={20} className={styles.icon} onClick={handleCopy} />
                     </div>
-                    <div className={styles.tooltipWrapper} data-tooltip="Insert into Mail (coming soon)">
+                    <div
+                      className={styles.tooltipWrapper}
+                      data-tooltip={insertTooltip}
+                      onClick={handleInsertIntoMail}
+                    >
                       <Mail size={20} className={styles.icon} />
                     </div>
                   </div>
@@ -258,12 +375,12 @@ const EmailAssistant = () => {
           <div className={styles.emailFields}>
             <div className={styles.fieldGroup}>
               <label htmlFor="subject">Subject</label>
-              <input type="text" id="subject" className={styles.subjectInput} placeholder="Enter subject" />
+              <input ref={subjectRef} type="text" id="subject" className={styles.subjectInput} placeholder="Enter subject" />
             </div>
 
             <div className={styles.fieldGroup}>
               <label htmlFor="message">Message</label>
-              <textarea id="message" className={styles.messageInput} placeholder="Enter email content" rows={6} />
+              <textarea ref={messageRef} id="message" className={styles.messageInput} placeholder="Enter email content" rows={6} />
             </div>
           </div>
         </div>
@@ -271,14 +388,33 @@ const EmailAssistant = () => {
         <div className={styles.sidePanel}>
           <div className={styles.attachmentBox}>
             <p className={styles.attachmentTitle}>Attachment</p>
-            <div className={styles.uploadArea}>
+            <label className={styles.uploadArea}>
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                multiple={false}
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    setUploadedFile(e.target.files[0]);
+                  }
+                }}
+              />
               <img src={uploadIcon} alt="upload" className={styles.uploadIcon} />
-              <p className={styles.fileHint}>.csv or .xlsx</p>
-            </div>
-            <button className={styles.uploadBtn}>Upload Recipients</button>
+              <p className={styles.fileHint} title={uploadedFile?.name}>
+                <span className={styles.truncateText}>
+                  {uploadedFile
+                    ? uploadedFile.name.length > 40
+                      ? uploadedFile.name.slice(0, 37) + "..."
+                      : uploadedFile.name
+                    : ".csv or .xlsx"}
+                </span>
+              </p>
+              <p className={styles.fileHint}>click to upload or drag and drop</p>
+            </label>
           </div>
 
-          <button className={styles.sendBtn}>
+          <button className={styles.sendBtn} onClick={handleSendEmails}>
             <Send size={16} />
             <span>Send</span>
           </button>

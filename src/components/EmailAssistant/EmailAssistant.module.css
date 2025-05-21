@@ -288,6 +288,12 @@
     background-color: #000;
     border-radius: 0.5rem;
     margin-bottom: 1rem;
+    cursor: pointer;
+  }
+
+  .fileHint {
+    color: #aaa;
+    text-align: center;
   }
   
   .uploadIcon {
@@ -375,6 +381,15 @@
     pointer-events: none;
     cursor: not-allowed;
   }  
+
+.truncateText {
+  display: inline-block;
+  max-width: 180px; /* limit it to a specific width */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
   
   /* 🔥 RESPONSIVE ADAPTATIONS */
   @media (max-width: 768px) {

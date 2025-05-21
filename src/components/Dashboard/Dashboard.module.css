@@ -14,7 +14,7 @@ overflow: hidden;
 }
 
 /* On mobile: stack vertically */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
     .main {
       flex-direction: column;
     }
