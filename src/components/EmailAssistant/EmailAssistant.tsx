@@ -245,6 +245,9 @@ const EmailAssistant = () => {
   
     setAiResponse('');
     setIsTyping(true);
+    setAskInput('AI is thinking');
+  
+    await Promise.resolve();
   
     const abortController = new AbortController();
     setController(abortController);

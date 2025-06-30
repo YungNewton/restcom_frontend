@@ -6,7 +6,7 @@ import TextToSpeech from './TextToSpeech/TextToSpeech';
 import SpeechToText from './SpeechToText/SpeechToText';
 
 const Voice = () => {
-  const [activeTab, setActiveTab] = useState<'cloning' | 'tts' | 'stt'>('cloning');
+  const [activeTab, setActiveTab] = useState<'cloning' | 'tts' | 'stt'>('tts');
 
   const [engineOnline, setEngineOnline] = useState(false);
 

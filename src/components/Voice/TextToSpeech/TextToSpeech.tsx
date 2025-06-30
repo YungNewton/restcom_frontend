@@ -13,9 +13,9 @@ import Settings from './Right/Settings/Settings';
 import VoiceLibrary from './Right/VoiceLibrary/VoiceLibrary';
 
 const voices = [
-  { id: 'isaac', name: 'Isaac', avatar },
   { id: 'default_male', name: 'Default Male', avatar },
   { id: 'default_female', name: 'Default Female', avatar },
+  { id: 'isaac', name: 'Isaac', avatar },
 ];
 
 interface TextToSpeechProps {
