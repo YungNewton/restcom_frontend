@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from './DashboardHome.module.css'
 import {
@@ -11,6 +11,8 @@ import {
 const DashboardHome = () => {
   const [date, setDate] = useState('')
   const [animatedText, setAnimatedText] = useState('')
+  const indexRef = useRef(0)
+  const message = 'Welcome back!'
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -22,24 +24,15 @@ const DashboardHome = () => {
     })
     setDate(formatted)
 
-    const message = 'Welcome back!'
-    setAnimatedText('')
-    let i = -1
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
-
+    indexRef.current = 0
     const type = () => {
-      if (i < message.length) {
-        setAnimatedText(prev => prev + message.charAt(i))
-        i++
-        timeoutId = setTimeout(type, 60)
+      if (indexRef.current <= message.length) {
+        setAnimatedText(message.slice(0, indexRef.current))
+        indexRef.current++
+        setTimeout(type, 60)
       }
     }
-
-    timeoutId = setTimeout(type, 60)
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId)
-    }
+    type()
   }, [])
 
   const tools = [
@@ -51,9 +44,9 @@ const DashboardHome = () => {
       path: '/email-assistant',
     },
     {
-      title: 'Voice Cloning',
+      title: 'Voice Cloning & TTS',
       icon: <Mic color="#0073FF" size={20} />,
-      description: 'Also including text-to-speech engine.',
+      description: 'text-to-speech engine.',
       sub: 'Converts PDF books or text into audio using cloned voices, enabling creation of audiobooks with personalized voice models.',
       path: '/voice',
     },

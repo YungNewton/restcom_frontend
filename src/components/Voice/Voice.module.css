@@ -1,0 +1,133 @@
+/* ============ Base Layout ============ */
+.wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+/* ============ Tab Navigation ============ */
+.tabNavRow {
+  position: relative;
+}
+
+.tabNav {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 0 auto;
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #666;
+  padding: 0.5rem 0;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.tab:hover {
+  color: #aaa;
+  background-color: transparent;
+}
+
+.active {
+  color: white;
+}
+
+/* ============ Engine Status ============ */
+.engineStatus {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #888;
+  border: 1px solid #888;
+  padding: 0.3rem 0.7rem;
+  border-radius: 5px;
+}
+
+.statusText {
+  color: white;
+}
+
+.statusDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.online {
+  background-color: #12b76a;
+}
+
+.offline {
+  background-color: #666;
+}
+
+/* ============ Main Content ============ */
+.content {
+  margin-top: 1rem;
+}
+
+.panel {
+  border: 1px solid #333;
+  padding: 2rem;
+  border-radius: 12px;
+  color: white;
+}
+
+/* ============ Responsive Queries ============ */
+@media (max-width: 1024px) {
+  .panel {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .tabNav {
+    gap: 1.5rem;
+  }
+
+  .tabNavRow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+    position: static;
+  }
+
+  .engineStatus {
+    position: static;
+    transform: none;
+  }
+
+  .panel {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .tab {
+    font-size: 0.9rem;
+  }
+
+  .panel {
+    padding: 1rem;
+  }
+
+  .engineStatus {
+    font-size: 0.8rem;
+  }
+}

@@ -1,0 +1,242 @@
+.panel {
+  border: 1px solid #333;
+  padding: 2rem;
+  border-radius: 12px;
+  color: white;
+  background: #111;
+
+}
+
+/* Section wrapper */
+.sectionBox {
+  width: 55%;
+  margin: 0 auto;
+}
+
+.sectionHeader {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: white;
+  font-size: 1rem;
+}
+
+/* Upload box */
+.uploadBox {
+  border: 1px dashed #444;
+  border-radius: 10px;
+  padding: 1.5rem;
+  text-align: center;
+  margin-bottom: 1rem;
+  background: #222;
+  transition: background 0.2s;
+}
+
+.uploadBox:hover {
+  cursor: pointer;
+  background: #2a2a2a;
+}
+
+.uploadInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.uploadInner:hover {
+  cursor: pointer;
+}
+
+/* File list */
+.fileList {
+  margin-top: 0.5rem;
+  list-style: none;
+  padding: 0;
+  color: #aaa;
+  font-size: 0.85rem;
+}
+
+/* Info box */
+.infoBox {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  color: #bbb;
+  font-size: 0.85rem;
+}
+
+.infoHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.infoBox p {
+  margin: 0.3rem 0;
+}
+
+/* Text, input, buttons */
+.subText {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  color: white;
+}
+
+.primaryBtn {
+  background: #0073ff;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.secondaryBtn {
+  background: #333;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Action buttons row */
+.actionRow {
+  width: 100%;
+  margin: 1.5rem auto 0 auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Success screen */
+.successContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem 0;
+}
+
+.successIcon {
+  color: #12b76a;
+}
+
+.successTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+}
+
+.successSubtitle {
+  font-size: 0.95rem;
+  color: #aaa;
+  margin: 0;
+}
+
+.successActions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+
+.voiceTag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
+  cursor: default;
+}
+
+.voiceTag:hover {
+  background: #222;
+}
+
+.voiceTag span {
+  font-size: 0.85rem;
+  color: #bbb;
+}
+
+.voiceTag img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.defaultAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00d4ff, #ff4ecd);
+}
+
+/* ---------------------------- */
+/* 🔥 Responsive Queries */
+/* ---------------------------- */
+
+@media (max-width: 1024px) {
+  .panel {
+    padding: 1.5rem;
+  }
+
+  .sectionBox {
+    width: 70%;
+  }
+}
+
+@media (max-width: 768px) {
+  .panel {
+    padding: 1.5rem;
+  }
+
+  .sectionBox {
+    width: 90%;
+  }
+
+  .successTitle {
+    font-size: 1.3rem;
+  }
+
+  .successSubtitle {
+    font-size: 0.9rem;
+  }
+
+}
+
+@media (max-width: 480px) {
+  .successTitle {
+    font-size: 1.2rem;
+  }
+
+  .panel {
+    padding: 1rem;
+  }
+
+  .successActions {
+    justify-content: center;
+  }
+  .actionRow {
+    justify-content: center;
+  }
+}

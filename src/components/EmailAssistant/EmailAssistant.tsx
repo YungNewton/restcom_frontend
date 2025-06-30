@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { ChevronDown, ChevronUp, RefreshCcw, Copy, Mail, Send } from 'lucide-react'
 import styles from './EmailAssistant.module.css'
+import NavTabs from '../../components/NavTabs/NavTabs';
 import sparkleIcon from '../../assets/sparkle-icon.png'
 import playIcon from '../../assets/play.png'
 import uploadIcon from '../../assets/upload.png'
@@ -9,6 +10,7 @@ import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import removeMarkdown from 'remove-markdown'
 import { toast } from 'react-hot-toast'
+import * as RadioGroup from '@radix-ui/react-radio-group';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 const defaultPrompts = [
@@ -80,6 +82,8 @@ const EmailAssistant = () => {
 
   const [lastPrompt, setLastPrompt] = useState('')
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [recipientMode, setRecipientMode] = useState<'file' | 'manual'>('file');
+  const [manualEmails, setManualEmails] = useState('');
   const [recipientsFile, setRecipientsFile] = useState<File | null>(null);
   const [emailTaskId, setEmailTaskId] = useState<string | null>(null)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
@@ -89,20 +93,24 @@ const EmailAssistant = () => {
     const subject = subjectRef.current?.value?.trim();
     const message = messageRef.current?.value?.trim();
   
-    if (!recipientsFile) return toast.error("Please upload a recipient list.");
     if (!subject) return toast.error("Subject is required.");
     if (!message) return toast.error("Message is required.");
   
     const formData = new FormData();
-    formData.append("file", recipientsFile);
-    attachmentFiles.forEach((file, i) => {
-      formData.append(`attachment_${i}`, file);
-    });    
     formData.append("subject", subject);
     formData.append("message", message);
   
-    setIsSendingEmails(true);
-    setEmailTaskId(null);
+    if (recipientMode === 'file') {
+      if (!recipientsFile) return toast.error("Please upload a recipient list.");
+      formData.append("file", recipientsFile);
+    } else {
+      if (!manualEmails.trim()) return toast.error("Please enter recipient emails.");
+      formData.append("emails", manualEmails);
+    }
+  
+    attachmentFiles.forEach((file, i) => {
+      formData.append(`attachment_${i}`, file);
+    });
     const toastId = toast.loading("Sending emails...");
   
     try {
@@ -320,15 +328,7 @@ const EmailAssistant = () => {
 
   return (
     <div className={styles.wrapper}>
-      <div className={styles.navWrapper}>
-        <div className={styles.tabNav}>
-          <button className={`${styles.tab} ${styles.active}`}>Email Assistant</button>
-          <button className={styles.tab}>Voice & TTS</button>
-          <button className={styles.tab}>Video Generator</button>
-          <button className={styles.tab}>Image Generator</button>
-        </div>
-      </div>
-
+      <NavTabs />
       <div className={styles.contentRow}>
         <div className={styles.assistantPanel}>
           <div className={styles.aiSectionHeader}>
@@ -426,7 +426,7 @@ const EmailAssistant = () => {
 
             <div className={styles.fieldGroup}>
               <label htmlFor="message">Message</label>
-              <textarea ref={messageRef} id="message" className={styles.messageInput} placeholder="Enter email content" rows={6} />
+              <textarea ref={messageRef} id="message" className={styles.messageInput} placeholder="Enter email content" rows={10} />
             </div>
           </div>
         </div>
@@ -459,24 +459,63 @@ const EmailAssistant = () => {
             </label>
           </div>
 
-          <div className={styles.attachmentBox}>
-            <p className={styles.attachmentTitle}>Recipient List (.csv, .xlsx)</p>
-            <label className={`${styles.uploadArea} ${styles.uploadAreaThin}`}>
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) setRecipientsFile(file);
-                }}
-              />
-              <img src={uploadIcon} alt="upload" className={styles.uploadIcon} />
-              <p className={styles.fileHint} title={recipientsFile?.name}>
-                {recipientsFile?.name || "Upload .csv with emails"}
+          <RadioGroup.Root
+            className={styles.modeToggle}
+            value={recipientMode}
+            onValueChange={(value) => setRecipientMode(value as 'file' | 'manual')}
+          >
+            <RadioGroup.Item asChild value="file">
+              <label className={styles.radioItem}>
+                <span className={styles.radioButton}>
+                  <span className={styles.radioIndicator} />
+                </span>
+                <span>Upload</span>
+              </label>
+            </RadioGroup.Item>
+
+            <RadioGroup.Item asChild value="manual">
+              <label className={styles.radioItem}>
+                <span className={styles.radioButton}>
+                  <span className={styles.radioIndicator} />
+                </span>
+                <span>Type In</span>
+              </label>
+            </RadioGroup.Item>
+          </RadioGroup.Root>
+
+          {recipientMode === 'file' ? (
+            <div className={styles.attachmentBox}>
+              <p className={styles.attachmentTitle}>Recipient List (.csv, .xlsx)</p>
+              <label className={`${styles.uploadArea} ${styles.uploadAreaThin}`}>
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setRecipientsFile(file);
+                  }}
+                />
+                <img src={uploadIcon} alt="upload" className={styles.uploadIcon} />
+                <p className={styles.fileHint} title={recipientsFile?.name}>
+                  {recipientsFile?.name || "Upload .csv with emails"}
+                </p>
+              </label>
+            </div>
+          ) : (
+            <div className={styles.attachmentBox}>
+              <p className={styles.attachmentTitle}>
+                Enter Emails <span className={styles.indent}>(separated by commas)</span>
               </p>
-            </label>
-          </div>
+              <textarea
+                className={styles.manualInput}
+                rows={4}
+                placeholder="email1@example.com, email2@example.com"
+                value={manualEmails}
+                onChange={(e) => setManualEmails(e.target.value)}
+              />
+            </div>
+          )}
           {isSendingEmails ? (
             <button className={styles.sendBtn} onClick={handleCancelEmailTask}>
               <div className={styles.spinner} />

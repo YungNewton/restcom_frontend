@@ -7,51 +7,6 @@
     overflow: auto;
   }
   
-  .navWrapper {
-    flex: 0 0 auto;
-    display: flex;
-    margin-bottom: 1.5rem;
-  }
-  
-  .tabNav {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background-color: #111;
-    padding: 0.75rem 1rem;
-    border-radius: 0.5rem;
-    gap: 1rem;
-    flex: 1;
-    min-width: 0;
-    height: 4rem;
-    overflow-x: auto;
-  }
-  
-  .tab {
-    background: transparent;
-    border: none;
-    padding: 0.6rem 0;
-    border-radius: 0.6rem;
-    font-weight: 500;
-    font-size: 0.95rem;
-    color: white;
-    cursor: pointer;
-    transition: background 0.2s ease;
-    white-space: nowrap;
-    flex: 1;
-    text-align: center;
-    min-width: 120px;
-  }
-  
-  .tab:hover {
-    background-color: #1d1d1d;
-  }
-  
-  .active {
-    background-color: black;
-    color: #0073ff;
-  }
-  
   .contentRow {
     display: flex;
     flex: 1;
@@ -422,6 +377,72 @@
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+.modeToggle {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.radioItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #444;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 0.8rem;
+  white-space: nowrap; /* 🔥 Prevent text from stacking */
+  transition: border-color 0.2s;
+}
+
+.radioItem:hover {
+  border-color: #0073ff;
+}
+
+.radioButton {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #666;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease;
+}
+
+.radioIndicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #0073ff;
+  transform: scale(0);
+  transition: transform 0.2s ease-in-out;
+}
+
+[data-state="checked"] .radioIndicator {
+  transform: scale(1);
+}
+
+.manualInput::placeholder {
+  font-size: 0.9rem;
+}
+
+.indent {
+  display: inline-block;
+  color: #aaa;
+}
+
+.attachmentTitle {
+  color: white;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-align: center; /* 🔥 Center align */
 }
 
   /* 🔥 RESPONSIVE ADAPTATIONS */

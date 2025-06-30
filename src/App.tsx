@@ -4,6 +4,7 @@ import LandingPage from './pages/LandingPage'
 import Login from './pages/authentication/Login'
 import Dashboard from './pages/dashboard/Dashboard'
 import EmailAssistantTool from './pages/tools/EmailAssistant'
+import VoiceTool from './pages/tools/Voice'
 import ProtectedRoute from './routes/ProtectedRoute'
 import { useAuth } from './context/AuthContext'
 
@@ -24,6 +25,7 @@ function App() {
         />
         <Route path="/dashboard" element={<ProtectedRoute Component={Dashboard} />} />
         <Route path="/email-assistant" element={<ProtectedRoute Component={EmailAssistantTool} />} />
+        <Route path="/voice" element={<ProtectedRoute Component={VoiceTool} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
