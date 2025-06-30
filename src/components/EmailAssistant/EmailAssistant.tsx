@@ -78,7 +78,6 @@ const EmailAssistant = () => {
   const [copyTooltip, setCopyTooltip] = useState('Copy to Clipboard')
 
   const responseRef = useRef<HTMLDivElement>(null)
-  const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [lastPrompt, setLastPrompt] = useState('')
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
@@ -236,90 +235,102 @@ const EmailAssistant = () => {
 
   const sendPrompt = async (prompt: string) => {
     if (isTyping) {
-      controller?.abort()
-      if (typingIntervalRef.current) {
-        clearInterval(typingIntervalRef.current)
-        typingIntervalRef.current = null
-      }
-      setIsTyping(false)
-      setAskInput('')
-      return
+      controller?.abort();
+      setIsTyping(false);
+      setAskInput('');
+      return;
     }
   
-    if (!prompt.trim()) return
+    if (!prompt.trim()) return;
   
-    if (typingIntervalRef.current) {
-      clearInterval(typingIntervalRef.current)
-      typingIntervalRef.current = null
-    }
+    setAiResponse('');
+    setIsTyping(true);
   
-    setAiResponse('')
-    setIsTyping(true)
-    setAskInput('AI is thinking')
+    const abortController = new AbortController();
+    setController(abortController);
   
-    const dots = ['.', '..', '...']
-    let dotIndex = 0
-    const animateDots = setInterval(() => {
-      setAskInput(`AI is thinking${dots[dotIndex % dots.length]}`)
-      dotIndex++
-    }, 500)
-  
-    const abortController = new AbortController()
-    setController(abortController)
+    let dotIndex = 0;
+    const dots = ['.', '..', '...'];
+    const animateInterval = setInterval(() => {
+      setAskInput(`AI is thinking${dots[dotIndex % dots.length]}`);
+      dotIndex++;
+    }, 500);
   
     try {
-      setLastPrompt(prompt)
+      setLastPrompt(prompt);
+  
       const res = await fetch(`${API_BASE_URL}/emails/generate-ai-email/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt,
-          history: conversationHistory
+          history: conversationHistory,
+          stream: true,
         }),
-        signal: abortController.signal
-      })
+        signal: abortController.signal,
+      });
   
-      const data = await res.json()
-      const fullResponse = data.response || 'No response.'
+      if (!res.ok || !res.body) {
+        const error = await res.text();
+        throw new Error(error || 'Request failed');
+      }
   
-      let index = -1
-      setAiResponse('') // clear before typing
-      const speed = 8
-
-      const typeChar = () => {
-        if (index < fullResponse.length) {
-          setAiResponse(prev => prev + fullResponse.charAt(index))
-          index++
-          typingIntervalRef.current = setTimeout(typeChar, speed)
-        } else {
-          clearInterval(animateDots)
-          setIsTyping(false)
-          setAskInput('')
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let done = false;
+  
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        const chunk = decoder.decode(value);
+  
+        const lines = chunk
+          .split('\n')
+          .filter((line) => line.trim().startsWith('data:'));
+  
+        for (const line of lines) {
+          const data = line.replace('data: ', '').trim();
+          if (data === '[DONE]') {
+            done = true;
+            break;
+          }
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.token) {
+              setAiResponse((prev) => prev + parsed.token);
+            }
+            if (parsed.error) {
+              throw parsed.error;
+            }
+          } catch (e) {
+            console.error('Parse error:', e);
+          }
         }
       }
-
-      typeChar()
   
-      setConversationHistory(prev => {
-        const updated = [
-          ...prev,
-          { role: 'user', content: prompt },
-          { role: 'assistant', content: fullResponse }
-        ]
-        return updated.slice(-10)
-      })
+      clearInterval(animateInterval);
+      setIsTyping(false);
+      setAskInput('');
+  
+      setConversationHistory((prev) => [
+        ...prev,
+        { role: 'user', content: prompt },
+        { role: 'assistant', content: aiResponse },
+      ]);
     } catch (error) {
+      console.error('Streaming error:', error);
+      clearInterval(animateInterval);
       if (error instanceof DOMException && error.name === 'AbortError') {
-        setAiResponse('Request cancelled.')
-      } else if (error instanceof Error) {
-        setAiResponse('Something went wrong: ' + error.message)
+        setAiResponse('Request cancelled.');
       } else {
-        setAiResponse('Unknown error occurred.')
+        setAiResponse(`Something went wrong: ${error}`);
       }
+      setIsTyping(false);
+      setAskInput('');
     } finally {
-      setController(null)
+      setController(null);
     }
-  }
+  };  
   
   const handleAsk = () => {
     if (!askInput.trim()) return
