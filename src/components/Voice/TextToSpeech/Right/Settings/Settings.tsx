@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import Slider from 'rc-slider';
-import 'rc-slider/assets/index.css';
 import styles from './Settings.module.css';
 
 import avatar from '../../../../../assets/voice-avatar.png';
+import Slider from 'rc-slider';
+import 'rc-slider/assets/index.css';
 
 interface SettingsProps {
   speed: number;
@@ -19,6 +19,9 @@ interface SettingsProps {
   setFileFormat: (value: string) => void;
   selectedVoice: { id: string; name: string; avatar: string };
   setSelectedVoice: (voice: { id: string; name: string; avatar: string }) => void;
+  dialogueMode: boolean;
+  setDialogueMode: (value: boolean) => void;
+  setSpeakers: (speakers: { id: number; voiceName: string }[]) => void;
   goToVoiceLibrary: () => void;
 }
 
@@ -27,9 +30,6 @@ const voices = [
   { id: 'default_male', name: 'Default Male', avatar },
   { id: 'default_female', name: 'Default Female', avatar },
 ];
-
-const languages = ['English', 'French', 'Spanish', 'German', 'Chinese'];
-const fileFormats = ['mp3', 'wav'];
 
 const Settings: React.FC<SettingsProps> = ({
   speed,
@@ -44,11 +44,17 @@ const Settings: React.FC<SettingsProps> = ({
   setFileFormat,
   selectedVoice,
   setSelectedVoice,
+  dialogueMode,
+  setDialogueMode,
+  setSpeakers,
   goToVoiceLibrary,
 }) => {
   const [showVoiceDropdown, setShowVoiceDropdown] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [showFormatDropdown, setShowFormatDropdown] = useState(false);
+
+  const languages = ['English', 'French', 'Spanish', 'German', 'Chinese'];
+  const fileFormats = ['mp3', 'wav'];
 
   const handleSelectVoice = (voice: typeof voices[0]) => {
     setSelectedVoice(voice);
@@ -57,7 +63,7 @@ const Settings: React.FC<SettingsProps> = ({
 
   return (
     <div className={styles.wrapper}>
-      {/* 🔥 Voice Selector */}
+      {/* Voice Selector */}
       <div className={styles.section}>
         <label className={styles.label}>Voice</label>
         <div className={styles.voicePanel}>
@@ -95,7 +101,25 @@ const Settings: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      {/* 🔥 Speed */}
+      {/* Dialogue Mode Toggle */}
+      <div className={styles.section}>
+        <label className={styles.label}>Dialogue Mode</label>
+        <div className={styles.toggleRow}>
+        <input
+          type="checkbox"
+          checked={dialogueMode}
+          onChange={(e) => {
+            setDialogueMode(e.target.checked);
+            if (!e.target.checked) {
+              setSpeakers([]);
+            }
+          }}
+        />
+          <span>Enable Dialogue Mode to add multiple speakers</span>
+        </div>
+      </div>
+
+      
       <div className={styles.section}>
         <label className={styles.label}>Speed</label>
         <div className={styles.sliderWrapper}>
@@ -210,7 +234,7 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
           )}
         </div>
-      </div>
+      </div>    
     </div>
   );
 };

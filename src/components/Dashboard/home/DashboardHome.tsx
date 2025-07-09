@@ -47,7 +47,7 @@ const DashboardHome = () => {
       title: 'Voice Cloning & TTS',
       icon: <Mic color="#0073FF" size={20} />,
       description: 'text-to-speech engine.',
-      sub: 'Converts PDF books or text into audio using cloned voices, enabling creation of audiobooks with personalized voice models.',
+      sub: 'Converts PDF books or text into audio using cloned voices, enabling creation of audiobooks with personalized voice models. Also includes Speech to text.',
       path: '/voice',
     },
     {

@@ -451,7 +451,6 @@ const EmailAssistant = () => {
             <label className={styles.uploadArea}>
             <input
               type="file"
-              accept=".pdf,.docx,.jpg,.png"
               multiple
               style={{ display: 'none' }}
               onChange={(e) => {

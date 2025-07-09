@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Upload, Play, Pause, RotateCcw, Download, ChevronDown, Info
+  Upload, Play, Pause, RotateCcw, Download, Info, Trash2
 } from 'lucide-react';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
@@ -27,12 +27,14 @@ interface TextToSpeechProps {
 const TextToSpeech: React.FC<TextToSpeechProps> = ({
   setActiveTab,
   engineOnline,
-  // setEngineOnline
 }) => {
   const [text, setText] = useState('');
   const [selectedVoice, setSelectedVoice] = useState(voices[0]);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [showPlayback, setShowPlayback] = useState(false);
+
+  const [dialogueMode, setDialogueMode] = useState(false);
+  const [speakers, setSpeakers] = useState<{ id: number; voiceName: string }[]>([]);
+  const speakerListRef = useRef<HTMLDivElement>(null);
 
   const [speed, setSpeed] = useState(1);
   const [language, setLanguage] = useState('English');
@@ -58,6 +60,15 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
     }
   }, [activeRightTab]);
 
+  useEffect(() => {
+    if (speakerListRef.current) {
+      speakerListRef.current.scrollTo({
+        left: speakerListRef.current.scrollWidth,
+        behavior: 'smooth',
+      });
+    }
+  }, [speakers]);  
+
   const handleGenerate = () => {
     if (!engineOnline) {
       toast.error('Voice Engine is Offline');
@@ -81,39 +92,54 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
     toast.error('Failed to start Voice Engine. Service is not running.');
   };
 
-  const handleSelectVoice = (voice: typeof voices[0]) => {
-    setSelectedVoice(voice);
-    setShowDropdown(false);
-  };
-
   return (
     <div className={styles.wrapper}>
       {/* ✅ Left Panel */}
       <div className={`${styles.left} ${styles.panel}`}>
         <div className={styles.voicePanel}>
-          <div
-            className={styles.voiceSelector}
-            onClick={() => setShowDropdown(!showDropdown)}
-          >
+          <div className={styles.voiceSelector}>
             <img src={selectedVoice.avatar} alt="avatar" className={styles.avatar} />
             <span className={styles.voiceName}>{selectedVoice.name}</span>
-            <ChevronDown size={16} />
           </div>
-          {showDropdown && (
-            <div className={styles.dropdown}>
-              {voices.map((voice) => (
-                <div
-                  key={voice.id}
-                  className={styles.dropdownItem}
-                  onClick={() => handleSelectVoice(voice)}
-                >
-                  <img src={voice.avatar} alt="avatar" className={styles.avatar} />
-                  <span>{voice.name}</span>
+        </div>
+
+        {dialogueMode && (
+          <div className={styles.dialogueContainer}>
+            <button
+              className={styles.addSpeakerBtn}
+              onClick={() => {
+                const nextId = speakers.length + 1;
+                setSpeakers([...speakers, { id: nextId, voiceName: selectedVoice.name }]);
+              }}
+            >
+              + Add Speaker
+            </button>
+
+            <div className={styles.speakerList} ref={speakerListRef}>
+              {speakers.map((speaker, index) => (
+                <div key={speaker.id} className={styles.speakerCard}>
+                  <img src={avatar} alt="speaker avatar" className={styles.avatar} />
+                  <div className={styles.speakerDetails}>
+                    <span className={styles.voiceName}>{speaker.voiceName}</span>
+                    <span className={styles.speakerLabel}>Speaker {index + 1}</span>
+                  </div>
+                  <button
+                    className={styles.removeSpeakerBtn}
+                    onClick={() => {
+                      setSpeakers((prev) =>
+                        prev
+                          .filter((s) => s.id !== speaker.id)
+                          .map((s, i) => ({ ...s, id: i + 1 }))
+                      );
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         <textarea
           className={styles.textArea}
@@ -243,7 +269,12 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
             fileFormat={fileFormat}
             setFileFormat={setFileFormat}
             selectedVoice={selectedVoice}
-            setSelectedVoice={setSelectedVoice}
+            setSelectedVoice={(voice) => {
+              setSelectedVoice(voice);
+            }}            
+            dialogueMode={dialogueMode}
+            setDialogueMode={setDialogueMode}
+            setSpeakers={setSpeakers}
             goToVoiceLibrary={() => setActiveRightTab('voiceLibrary')}
           />
         ) : (
