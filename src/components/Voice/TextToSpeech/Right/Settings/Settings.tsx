@@ -53,7 +53,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [showFormatDropdown, setShowFormatDropdown] = useState(false);
 
-  const languages = ['English', 'French', 'Spanish', 'German', 'Chinese'];
+  const languages = ['English'];
   const fileFormats = ['mp3', 'wav'];
 
   const handleSelectVoice = (voice: typeof voices[0]) => {
@@ -102,20 +102,21 @@ const Settings: React.FC<SettingsProps> = ({
       </div>
 
       {/* Dialogue Mode Toggle */}
-      <div className={styles.section}>
+      <div className={`${styles.section} ${styles.dialogueToggle}`}>
         <label className={styles.label}>Dialogue Mode</label>
         <div className={styles.toggleRow}>
-        <input
-          type="checkbox"
-          checked={dialogueMode}
-          onChange={(e) => {
-            setDialogueMode(e.target.checked);
-            if (!e.target.checked) {
-              setSpeakers([]);
-            }
-          }}
-        />
-          <span>Enable Dialogue Mode to add multiple speakers</span>
+          <div
+            className={`${styles.checkbox} ${dialogueMode ? styles.checked : ''}`}
+            onClick={() => {
+              setDialogueMode(!dialogueMode);
+              if (dialogueMode) {
+                setSpeakers([]);
+              }
+            }}
+          />
+          <span className={styles.subText}>
+            Enable Dialogue Mode to add multiple speakers
+          </span>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 /* ============ Wrapper & Layout ============ */
-.wrapper {
+  .wrapper {
     display: flex;
     gap: 2rem;
     padding: 1rem;
@@ -36,8 +36,8 @@
   
   .sectionHeader {
     color: white;
-    font-weight: 600;
-    font-size: 1rem;
+    font-weight: 500;
+    font-size: 0.95rem;
     margin-bottom: 0.3rem;
   }
   
@@ -96,6 +96,7 @@
     color: white;
     height: 180px;
     resize: vertical;
+    font-size: 0.9rem;
   }
   
   /* ============ Action Buttons ============ */
@@ -113,6 +114,8 @@
     border-radius: 8px;
     cursor: pointer;
     font-weight: 500;
+    padding: 0.6rem 1.5rem;  /* Reduced from 0.75rem 1.5rem */
+    font-size: 0.9rem;     /* Reduced font size */
   }
   
   .primaryBtn:hover {
@@ -133,6 +136,7 @@
     border-radius: 8px;
     padding: 0.6rem 1rem;
     width: 100%;
+    font-size: 1rem;
   }
   
   /* ============ Toggles ============ */
@@ -285,7 +289,6 @@
     left: 0;
     width: 100%;
     z-index: 10;
-
   }
   
   .formatDropdownItem {

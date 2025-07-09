@@ -1,4 +1,3 @@
-/* ============== Wrapper & Layout ============== */
 .wrapper {
   display: flex;
   flex-direction: column;
@@ -17,7 +16,6 @@
   font-size: 0.9rem;
 }
 
-/* ============== Voice, Language, Format Selector ============== */
 .voicePanel {
   background: #1a1a1a;
   border: 1px solid #333;
@@ -42,7 +40,7 @@
 
 .voiceName {
   flex: 1;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: white;
   white-space: nowrap;
   overflow: hidden;
@@ -60,7 +58,6 @@
   color: white;
 }
 
-/* ============== Dropdown ============== */
 .dropdown {
   background: #222;
   border: 1px solid #333;
@@ -95,13 +92,13 @@
   border-top: 1px solid #333;
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
+  font-size: 0.9rem;
 }
 
 .manageVoices:hover {
   background: #2a2a2a;
 }
 
-/* ============== Input ============== */
 .input {
   background: #222;
   color: white;
@@ -109,9 +106,9 @@
   border-radius: 8px;
   padding: 0.6rem 1rem;
   width: 100%;
+  font-size: 0.9rem;
 }
 
-/* ============== Toggle (Checkbox) ============== */
 .toggleRow {
   display: flex;
   align-items: flex-start;
@@ -150,6 +147,7 @@
   color: white;
   font-size: 0.85rem;
   line-height: 1.3;
+  font-weight: normal;
 }
 
 .subText {
@@ -158,7 +156,6 @@
   line-height: 1.2;
 }
 
-/* ============== Slider ============== */
 .sliderWrapper {
   position: relative;
 }
@@ -171,7 +168,7 @@
   border: 1px solid #333;
   border-radius: 6px;
   padding: 2px 8px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #fff;
   white-space: nowrap;
 }
@@ -184,14 +181,59 @@
   margin-top: 0.3rem;
 }
 
-/* ============== Disabled Panel ============== */
 .disabled {
   opacity: 0.4;
   cursor: not-allowed;
   pointer-events: none;
 }
 
-/* 🌟 Responsive Queries */
+.dialogueToggle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dialogueToggle .toggleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.dialogueToggle .checkbox {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: #222;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dialogueToggle .checkbox.checked {
+  background-color: #0073ff;
+  border-color: #0073ff;
+}
+
+.dialogueToggle .checkbox.checked::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.dialogueToggle label {
+  color: white;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  font-weight: normal;
+}
+
 @media (max-width: 1024px) {
   .voiceName {
     max-width: 140px;
