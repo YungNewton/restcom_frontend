@@ -116,8 +116,12 @@
     font-weight: 500;
     padding: 0.6rem 1.5rem;  /* Reduced from 0.75rem 1.5rem */
     font-size: 0.9rem;     /* Reduced font size */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.4rem;
   }
-  
+
   .primaryBtn:hover {
     background: #005ed9;
   }
@@ -302,6 +306,16 @@
     background: #2a2a2a;
   }
   
+  .spinner {
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 0.8s linear infinite;
+    margin-right: 0.5rem;
+  }
+
   /* ============ Text ============ */
   .subText {
     color: #777;
