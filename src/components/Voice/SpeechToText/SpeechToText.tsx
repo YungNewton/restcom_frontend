@@ -6,14 +6,13 @@ import axios from 'axios';
 
 interface Props {
   engineOnline: boolean;
-  setEngineOnline: (status: boolean) => void;
 }
 
 const formats = ['txt', 'docx', 'json'];
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const VOICE_ENGINE_API_BASE_URL = import.meta.env.VITE_VOICE_ENGINE_API_BASE_URL;
 
-const SpeechToText = ({ engineOnline, setEngineOnline }: Props) => {
+const SpeechToText = ({ engineOnline }: Props) => {
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const [transcript, setTranscript] = useState('');
   const [autoPunctuation, setAutoPunctuation] = useState(true);
@@ -128,8 +127,7 @@ const SpeechToText = ({ engineOnline, setEngineOnline }: Props) => {
       const res = await axios.post(`${API_BASE_URL}/voice/start-runpod/`);
       toast.dismiss();
       if (['RUNNING', 'STARTING', 'REQUESTED'].includes(res.data.status)) {
-        toast.success('Voice Engine starting.');
-        setEngineOnline(true);
+        toast.success('Voice Engine is starting...');
       } else {
         toast.error(`Engine status: ${res.data.status || 'Unknown'}`);
       }

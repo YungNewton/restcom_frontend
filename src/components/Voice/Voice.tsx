@@ -4,6 +4,7 @@ import NavTabs from '../NavTabs/NavTabs';
 import VoiceCloning from './VoiceCloning/VoiceCloning';
 import TextToSpeech from './TextToSpeech/TextToSpeech';
 import SpeechToText from './SpeechToText/SpeechToText';
+import { toast } from 'react-hot-toast';
 
 const VOICE_ENGINE_API_BASE_URL = import.meta.env.VITE_VOICE_ENGINE_API_BASE_URL;
 
@@ -12,32 +13,49 @@ const Voice = () => {
   const [engineOnline, setEngineOnline] = useState(false);
 
   useEffect(() => {
+    let previousStatus = engineOnline;
+
     const checkEngineHealth = async () => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000); // 3 sec timeout
-  
+      const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
+    
       try {
         const res = await fetch(`${VOICE_ENGINE_API_BASE_URL}/health`, {
           signal: controller.signal,
         });
-        if (res.ok) {
-          setEngineOnline(true);
-        } else {
-          setEngineOnline(false);
+    
+        const isValid = res.ok;
+        let json: any = {};
+    
+        try {
+          json = await res.json();
+        } catch {
+          // not valid JSON
+          json = {};
         }
+    
+        const isOnline = isValid && json?.status === 'ok';
+    
+        if (!previousStatus && isOnline) {
+          toast.success('Voice Engine is live.');
+        }
+    
+        setEngineOnline(isOnline);
+        previousStatus = isOnline;
       } catch {
         setEngineOnline(false);
+        previousStatus = false;
       } finally {
         clearTimeout(timeout);
       }
-    };
-  
+    };    
+
     checkEngineHealth(); // initial call
-  
+
     const interval = setInterval(checkEngineHealth, 5000); // poll every 5s
-  
+
     return () => clearInterval(interval); // cleanup on unmount
-  }, []);  
+  }, []);
 
   return (
     <div className={styles.wrapper}>
@@ -95,7 +113,6 @@ const Voice = () => {
         {activeTab === 'stt' && (
           <SpeechToText 
             engineOnline={engineOnline} 
-            setEngineOnline={setEngineOnline} 
           />
         )}
       </div>
