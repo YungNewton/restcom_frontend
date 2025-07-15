@@ -6,55 +6,40 @@ import TextToSpeech from './TextToSpeech/TextToSpeech';
 import SpeechToText from './SpeechToText/SpeechToText';
 import { toast } from 'react-hot-toast';
 
-const VOICE_ENGINE_API_BASE_URL = import.meta.env.VITE_VOICE_ENGINE_API_BASE_URL;
+const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const Voice = () => {
   const [activeTab, setActiveTab] = useState<'cloning' | 'tts' | 'stt'>('tts');
   const [engineOnline, setEngineOnline] = useState(false);
 
   useEffect(() => {
-    let previousStatus = engineOnline;
+    const eventSource = new EventSource(`${VITE_API_BASE_URL}/voice/status/stream`);
 
-    const checkEngineHealth = async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
-    
+    eventSource.onmessage = (event) => {
       try {
-        const res = await fetch(`${VOICE_ENGINE_API_BASE_URL}/health`, {
-          signal: controller.signal,
-        });
-    
-        const isValid = res.ok;
-        let json: any = {};
-    
-        try {
-          json = await res.json();
-        } catch {
-          // not valid JSON
-          json = {};
-        }
-    
-        const isOnline = isValid && json?.status === 'ok';
-    
-        if (!previousStatus && isOnline) {
-          toast.success('Voice Engine is live.');
-        }
-    
+        const data = JSON.parse(event.data);
+        const isOnline = !!data.online;
         setEngineOnline(isOnline);
-        previousStatus = isOnline;
-      } catch {
-        setEngineOnline(false);
-        previousStatus = false;
-      } finally {
-        clearTimeout(timeout);
+
+        if (isOnline) {
+          toast.success('Voice Engine is live.');
+        } else {
+          toast.error('Voice Engine offline.');
+        }
+      } catch (err) {
+        console.error('Error parsing SSE data:', err);
       }
-    };    
+    };
 
-    checkEngineHealth(); // initial call
+    eventSource.onerror = (err) => {
+      console.error('SSE connection error:', err);
+      eventSource.close();
+      setEngineOnline(false);
+    };
 
-    const interval = setInterval(checkEngineHealth, 5000); // poll every 5s
-
-    return () => clearInterval(interval); // cleanup on unmount
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   return (

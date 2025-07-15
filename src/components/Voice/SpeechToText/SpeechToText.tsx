@@ -25,6 +25,7 @@ const SpeechToText = ({ engineOnline }: Props) => {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [downloadLink, setDownloadLink] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -42,22 +43,36 @@ const SpeechToText = ({ engineOnline }: Props) => {
   };
 
   const handleCancelTask = async () => {
-    if (!taskId) return;
-    try {
-      await axios.post(`${VOICE_ENGINE_API_BASE_URL}/cancel-task/`, { task_id: taskId });
-      toast.success('Task cancelled.');
-      setIsTranscribing(false);
-      setTaskId(null);
-      setDownloadLink(null);
-      setTranscript('');
-      if (pollRef.current) clearInterval(pollRef.current);
-    } catch (err) {
-      toast.error('Failed to cancel task.');
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();  // Immediately abort request
     }
-  };
+  
+    // Optimistically reset UI
+    setIsTranscribing(false);
+    setTaskId(null);
+    setDownloadLink(null);
+    setTranscript('');
+    toast.success('Task cancelled.');
+  
+    // Inform backend (don't block UI on this)
+    if (taskId) {
+      const formData = new FormData();
+      formData.append("task_id", taskId);
+      try {
+        await axios.post(`${VOICE_ENGINE_API_BASE_URL}/stt/cancel-task/`, formData);
+      } catch (err) {
+        toast.error('Failed to cancel task.');
+      }
+    }
+  };    
 
   const handleTranscribe = async () => {
     if (audioFiles.length === 0) return toast.error('Please upload at least one audio file.');
+  
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+  
     setIsTranscribing(true);
     setTranscript('');
     setDownloadLink(null);
@@ -66,25 +81,31 @@ const SpeechToText = ({ engineOnline }: Props) => {
     formData.append('output_name', outputName);
     formData.append('file_format', fileFormat);
     formData.append('profanity_filter', String(profanityFilter));
-
+  
     try {
-      const res = await axios.post(`${VOICE_ENGINE_API_BASE_URL}/stt/transcribe/`, formData);
+      const res = await axios.post(`${VOICE_ENGINE_API_BASE_URL}/stt/transcribe/`, formData, {
+        signal: controller.signal,
+      });
       const id = res.data.task_id;
       setTaskId(id);
       toast.success('Transcription started.');
       pollTaskStatus(id);
-    } catch (err) {
+    } catch (err: any) {
+      if (axios.isCancel(err)) {
+        console.log('Request canceled');
+      } else {
+        toast.error('Failed to start transcription.');
+      }
       setIsTranscribing(false);
-      toast.error('Failed to start transcription.');
     }
-  };
+  };  
 
   const pollTaskStatus = (taskId: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
   
     pollRef.current = setInterval(async () => {
       try {
-        const res = await axios.get(`${VOICE_ENGINE_API_BASE_URL}/task-status/${taskId}`);
+        const res = await axios.get(`${VOICE_ENGINE_API_BASE_URL}/stt/task-status/${taskId}`);
         const { state, result } = res.data;
   
         if (['SUCCESS', 'FAILURE', 'REVOKED'].includes(state)) {
@@ -118,7 +139,7 @@ const SpeechToText = ({ engineOnline }: Props) => {
       } catch (err) {
         console.error('Polling error:', err);
       }
-    }, 1000);
+    }, 4000);
   };  
 
   const handleStartEngine = async () => {
