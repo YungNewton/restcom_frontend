@@ -345,15 +345,15 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  color: #00b7ff;
+  color: #0073ff; /* Primary brand color */
   font-size: 0.9rem;
   font-weight: 500;
   text-decoration: none;
-  transition: color 0.2s;
+  transition: color 0.2s ease-in-out;
 }
 
 .downloadLink:hover {
-  color: #56d8ff;
+  color: #56aaff; /* Light variant for hover */
 }
 
   /* ============ Responsive ============ */

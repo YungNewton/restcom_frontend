@@ -3,12 +3,13 @@ import { Upload, Trash, ChevronDown, Download, Send } from 'lucide-react';
 import styles from './SpeechToText.module.css';
 import { toast } from 'react-hot-toast';
 import axios from 'axios';
+import { Document, Packer, Paragraph } from 'docx';
 
 interface Props {
   engineOnline: boolean;
 }
 
-const formats = ['txt', 'docx', 'json'];
+const formats = ['txt', 'docx', 'vtt', 'srt'];
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const VOICE_ENGINE_API_BASE_URL = import.meta.env.VITE_VOICE_ENGINE_API_BASE_URL;
 
@@ -45,17 +46,15 @@ const SpeechToText = ({ engineOnline }: Props) => {
   const handleCancelTask = async () => {
     if (pollRef.current) clearInterval(pollRef.current);
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();  // Immediately abort request
+      abortControllerRef.current.abort();
     }
-  
-    // Optimistically reset UI
+
     setIsTranscribing(false);
     setTaskId(null);
     setDownloadLink(null);
     setTranscript('');
     toast.success('Task cancelled.');
-  
-    // Inform backend (don't block UI on this)
+
     if (taskId) {
       const formData = new FormData();
       formData.append("task_id", taskId);
@@ -65,14 +64,14 @@ const SpeechToText = ({ engineOnline }: Props) => {
         toast.error('Failed to cancel task.');
       }
     }
-  };    
+  };
 
   const handleTranscribe = async () => {
     if (audioFiles.length === 0) return toast.error('Please upload at least one audio file.');
-  
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
-  
+
     setIsTranscribing(true);
     setTranscript('');
     setDownloadLink(null);
@@ -81,7 +80,7 @@ const SpeechToText = ({ engineOnline }: Props) => {
     formData.append('output_name', outputName);
     formData.append('file_format', fileFormat);
     formData.append('profanity_filter', String(profanityFilter));
-  
+
     try {
       const res = await axios.post(`${VOICE_ENGINE_API_BASE_URL}/stt/transcribe/`, formData, {
         signal: controller.signal,
@@ -98,39 +97,51 @@ const SpeechToText = ({ engineOnline }: Props) => {
       }
       setIsTranscribing(false);
     }
-  };  
+  };
 
-  const pollTaskStatus = (taskId: string) => {
+  const pollTaskStatus = async (taskId: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
-  
-    pollRef.current = setInterval(async () => {
+
+    pollRef.current = window.setInterval(async () => {
       try {
         const res = await axios.get(`${VOICE_ENGINE_API_BASE_URL}/stt/task-status/${taskId}`);
         const { state, result } = res.data;
-  
+
         if (['SUCCESS', 'FAILURE', 'REVOKED'].includes(state)) {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setIsTranscribing(false);
           setTaskId(null);
-  
+
           if (state === 'SUCCESS') {
             const transcriptText = result.transcript || '';
             setTranscript(transcriptText);
-  
-            // 🟢 Create downloadable blob file
-            const blob = new Blob([transcriptText], {
-              type:
-                fileFormat === 'json'
-                  ? 'application/json'
-                  : fileFormat === 'docx'
-                  ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                  : 'text/plain',
-            });
-  
+
+            // 🔵 Handle different formats
+            let blob: Blob | null = null;
+
+            if (fileFormat === 'docx') {
+              const doc = new Document({
+                sections: [
+                  {
+                    children: [new Paragraph(transcriptText)],
+                  },
+                ],
+              });
+              blob = await Packer.toBlob(doc);
+            } else {
+              const mimeType =
+                fileFormat === 'srt'
+                  ? 'application/x-subrip'
+                  : fileFormat === 'vtt'
+                  ? 'text/vtt'
+                  : 'text/plain';
+
+              blob = new Blob([transcriptText], { type: mimeType });
+            }
+
             const downloadUrl = URL.createObjectURL(blob);
             setDownloadLink(downloadUrl);
-  
             toast.success('Transcription complete.');
           } else {
             toast.error(`Transcription ${state.toLowerCase()}.`);
@@ -140,7 +151,7 @@ const SpeechToText = ({ engineOnline }: Props) => {
         console.error('Polling error:', err);
       }
     }, 4000);
-  };  
+  };
 
   const handleStartEngine = async () => {
     toast.loading('Starting Voice Engine...');
@@ -148,7 +159,7 @@ const SpeechToText = ({ engineOnline }: Props) => {
       const res = await axios.post(`${API_BASE_URL}/voice/start-runpod/`);
       toast.dismiss();
       if (['RUNNING', 'STARTING', 'REQUESTED'].includes(res.data.status)) {
-        toast.success('Voice Engine is starting...');
+        toast.success('Voice Engine is starting... May take 2–5 mins');
       } else {
         toast.error(`Engine status: ${res.data.status || 'Unknown'}`);
       }
