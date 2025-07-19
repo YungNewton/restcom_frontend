@@ -65,27 +65,37 @@
   
   /* File List */
   .fileList {
-    margin-top: 0.8rem;
+    margin-top: 0.5rem;
     list-style: none;
     padding: 0;
     color: #aaa;
     font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
   }
   
   .fileList li {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    background: #1d1d1d;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    word-break: break-all;
   }
   
   .trash {
-    color: #888;
+    margin-left: 8px;
     cursor: pointer;
+    color: #888;
+    transition: color 0.2s ease;
   }
   
   .trash:hover {
-    color: #fff;
-  }
+    color: #ff4d4f;
+  }  
   
   /* ============ Transcript Box ============ */
   .textArea {

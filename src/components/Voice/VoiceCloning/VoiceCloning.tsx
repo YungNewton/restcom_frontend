@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Upload, Info, CheckCircle } from 'lucide-react';
+import { Upload, Info, CheckCircle, Trash } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import styles from './VoiceCloning.module.css';
 import VoiceLibrary from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary';
@@ -48,6 +48,12 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
     setAudioFiles(totalFiles);
   };
 
+  const removeFile = (index: number) => {
+    const updated = [...audioFiles];
+    updated.splice(index, 1);
+    setAudioFiles(updated);
+  };
+
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -68,10 +74,10 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
     try {
       const res = await axios.post(`${API_BASE_URL}/voice/start-runpod/`);
       toast.dismiss();
-  
+
       const status = res.data.status;
-  
-      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(status)) {
+
+      if (["RUNNING", "STARTING", "REQUESTED"].includes(status)) {
         toast.success('Voice Engine is starting.');
       } else if (status === 'HEALTHY') {
         toast.success('Voice Engine is already live. Refresh the page if needed.');
@@ -115,17 +121,10 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
 
         <div className={styles.right}>
           <div className={styles.tabs}>
-            <button
-              ref={tabsRef.voiceLibrary}
-              className={styles.active}
-              onClick={() => {}}
-            >
+            <button ref={tabsRef.voiceLibrary} className={styles.active} onClick={() => {}}>
               Voice Library
             </button>
-            <div
-              className={styles.tabIndicator}
-              style={{ left: indicatorLeft, width: indicatorWidth }}
-            />
+            <div className={styles.tabIndicator} style={{ left: indicatorLeft, width: indicatorWidth }} />
           </div>
           <VoiceLibrary goToVoiceCloning={() => {}} />
         </div>
@@ -135,27 +134,29 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
 
   return (
     <div className={styles.wrapper}>
-      {/* ✅ Left Panel */}
-      <div className={styles.left}>
-        <div className={`${styles.uploadBox} ${styles.sectionBox}`}>
-          <label>
+      <div className={`${styles.left} ${styles.panel}`}>
+        <div className={styles.sectionBox}>
+          <h3 className={styles.sectionHeader}>Upload Audio</h3>
+          <label className={styles.uploadBox}>
             <input
               type="file"
               accept="audio/*,video/*"
-              multiple
               style={{ display: 'none' }}
               onChange={handleAudioUpload}
             />
             <div className={styles.uploadInner}>
               <Upload size={24} />
               <p>Click to upload a file or drag and drop</p>
-              <p className={styles.subText}>Audio or Video files, up to 10 files, 20MB each</p>
+              <p className={styles.subText}>Audio or Video files, Max file size 50MB</p>
             </div>
           </label>
           {audioFiles.length > 0 && (
             <ul className={styles.fileList}>
               {audioFiles.map((file, i) => (
-                <li key={i}>{file.name}</li>
+                <li key={i}>
+                  {file.name}
+                  <Trash size={14} onClick={() => removeFile(i)} className={styles.trash} />
+                </li>
               ))}
             </ul>
           )}
@@ -183,8 +184,8 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
           />
         </div>
 
-        <div className={styles.uploadBox}>
-          <label>
+        <div className={styles.sectionBox}>
+          <label className={styles.uploadBox}>
             <input
               type="file"
               accept="image/*"
@@ -197,7 +198,15 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
               <p className={styles.subText}>Max file size 5MB (Optional)</p>
             </div>
           </label>
-          {avatarFile && <p className={styles.subText}>{avatarFile.name}</p>}
+
+          {avatarFile && (
+            <ul className={styles.fileList}>
+              <li>
+                {avatarFile.name}
+                <Trash size={14} className={styles.trash} onClick={() => setAvatarFile(null)} />
+              </li>
+            </ul>
+          )}
         </div>
 
         <div className={styles.actionRow}>
@@ -213,20 +222,12 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
         </div>
       </div>
 
-      {/* ✅ Right Panel */}
       <div className={styles.right}>
         <div className={styles.tabs}>
-          <button
-            ref={tabsRef.voiceLibrary}
-            className={styles.active}
-            onClick={() => {}}
-          >
+          <button ref={tabsRef.voiceLibrary} className={styles.active} onClick={() => {}}>
             Voice Library
           </button>
-          <div
-            className={styles.tabIndicator}
-            style={{ left: indicatorLeft, width: indicatorWidth }}
-          />
+          <div className={styles.tabIndicator} style={{ left: indicatorLeft, width: indicatorWidth }} />
         </div>
         <VoiceLibrary goToVoiceCloning={() => {}} />
       </div>
