@@ -3,13 +3,12 @@ import { Upload, Trash, ChevronDown, Download, Send } from 'lucide-react';
 import styles from './SpeechToText.module.css';
 import { toast } from 'react-hot-toast';
 import axios from 'axios';
-import { Document, Packer, Paragraph } from 'docx';
 
 interface Props {
   engineOnline: boolean;
 }
 
-const formats = ['txt', 'docx', 'vtt', 'srt'];
+const formats = ['txt', 'vtt', 'srt'];
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const VOICE_ENGINE_API_BASE_URL = import.meta.env.VITE_VOICE_ENGINE_API_BASE_URL;
 
@@ -17,7 +16,7 @@ const SpeechToText = ({ engineOnline }: Props) => {
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const [transcript, setTranscript] = useState('');
   const [autoPunctuation, setAutoPunctuation] = useState(true);
-  const [profanityFilter, setProfanityFilter] = useState(true);
+  const [profanityFilter, setProfanityFilter] = useState(false);
   const [smartContext, setSmartContext] = useState(true);
   const [outputName, setOutputName] = useState('transcript');
   const [fileFormat, setFileFormat] = useState('txt');
@@ -117,29 +116,14 @@ const SpeechToText = ({ engineOnline }: Props) => {
             const transcriptText = result.transcript || '';
             setTranscript(transcriptText);
 
-            // 🔵 Handle different formats
-            let blob: Blob | null = null;
+            const mimeType =
+              fileFormat === 'srt'
+                ? 'application/x-subrip'
+                : fileFormat === 'vtt'
+                ? 'text/vtt'
+                : 'text/plain';
 
-            if (fileFormat === 'docx') {
-              const doc = new Document({
-                sections: [
-                  {
-                    children: [new Paragraph(transcriptText)],
-                  },
-                ],
-              });
-              blob = await Packer.toBlob(doc);
-            } else {
-              const mimeType =
-                fileFormat === 'srt'
-                  ? 'application/x-subrip'
-                  : fileFormat === 'vtt'
-                  ? 'text/vtt'
-                  : 'text/plain';
-
-              blob = new Blob([transcriptText], { type: mimeType });
-            }
-
+            const blob = new Blob([transcriptText], { type: mimeType });
             const downloadUrl = URL.createObjectURL(blob);
             setDownloadLink(downloadUrl);
             toast.success('Transcription complete.');
@@ -158,17 +142,22 @@ const SpeechToText = ({ engineOnline }: Props) => {
     try {
       const res = await axios.post(`${API_BASE_URL}/voice/start-runpod/`);
       toast.dismiss();
-      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(res.data.status)) {
-        toast.success('Voice Engine is starting... May take 2–5 mins');
+  
+      const status = res.data.status;
+  
+      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(status)) {
+        toast.success('Voice Engine is starting.');
+      } else if (status === 'HEALTHY') {
+        toast.success('Voice Engine is already live. Refresh the page if needed.');
       } else {
-        toast.error(`Engine status: ${res.data.status || 'Unknown'}`);
+        toast.error(`Engine status: ${status || 'Unknown'}`);
       }
     } catch (err: any) {
       toast.dismiss();
       console.error('API Error:', err);
       toast.error('Failed to start Voice Engine.');
     }
-  };
+  };  
 
   return (
     <div className={styles.wrapper}>

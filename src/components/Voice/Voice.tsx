@@ -83,7 +83,6 @@ const Voice = () => {
           <VoiceCloning 
             setActiveTab={setActiveTab} 
             engineOnline={engineOnline} 
-            setEngineOnline={setEngineOnline} 
           />        
         )}
 
