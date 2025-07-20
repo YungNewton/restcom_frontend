@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Upload, Info, CheckCircle, Trash, ChevronDown, Send, Play, Pause, Loader2  } from 'lucide-react';
+import { Upload, Info, CheckCircle, Trash, ChevronDown, Send, Play, Pause, Loader2, Heart } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import useSound from 'use-sound';
 import styles from './VoiceCloning.module.css';
 import VoiceLibrary from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary';
 
@@ -46,12 +47,48 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const [text] = useState(
     sampleVoiceTexts[Math.floor(Math.random() * sampleVoiceTexts.length)]
   );
+  
+  const [playFn, setPlayFn] = useState<(() => void) | null>(null);
+  const [pauseFn, setPauseFn] = useState<(() => void) | null>(null);
+  const [audioSound, setAudioSound] = useState<any>(null);
+
+  const [play, { pause, sound }] = useSound(audioUrl || "", {
+    format: ['wav'],
+    interrupt: true,
+    soundEnabled: !!audioUrl, // Don't preload unless URL is valid
+  });
+  
+
+  useEffect(() => {
+    setPlayFn(() => play);
+    setPauseFn(() => pause);
+    setAudioSound(sound);
+  
+    return () => {
+      sound?.unload();
+    };
+  }, [play, pause, sound]);  
+    
+  useEffect(() => {
+    if (!audioSound) return;
+  
+    audioSound.on('play', () => setIsPlaying(true));
+    audioSound.on('pause', () => setIsPlaying(false));
+    audioSound.on('end', () => setIsPlaying(false));
+  
+    return () => {
+      audioSound.off('play');
+      audioSound.off('pause');
+      audioSound.off('end');
+    };
+  }, [audioSound]);  
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -78,40 +115,42 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
   };
 
   const handleClone = async () => {
-    if (audioFiles.length === 0) return toast.error('Upload an audio file.');
-    if (!transcript.trim()) return toast.error('Transcript is required.');
+    // if (audioFiles.length === 0) return toast.error('Upload an audio file.');
+    // if (!transcript.trim()) return toast.error('Transcript is required.');
   
-    const formData = new FormData();
-    formData.append('audio', audioFiles[0]); // Only first file is used for cloning
-    formData.append('prompt_transcript', transcript.trim());
-    formData.append('text', text); // internal speech
-    formData.append('language', 'en');
+    // const formData = new FormData();
+    // formData.append('audio', audioFiles[0]); // Only first file is used for cloning
+    // formData.append('prompt_transcript', transcript.trim());
+    // formData.append('text', text); // internal speech
+    // formData.append('language', 'en');
   
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    // const controller = new AbortController();
+    // abortControllerRef.current = controller;
   
-    try {
-      setIsCloning(true);
-      toast.loading('Cloning voice...');
-      const res = await axios.post(`${VOICE_ENGINE_API_BASE_URL}/cloning/clone/`, formData, {
-        signal: controller.signal,
-      });
+    // try {
+    //   setPreviewFailed(false);
+    //   setIsCloning(true);
+    //   toast.loading('Cloning voice...');
+    //   const res = await axios.post(`${VOICE_ENGINE_API_BASE_URL}/cloning/clone/`, formData, {
+    //     signal: controller.signal,
+    //   });
   
-      const id = res.data.task_id;
-      setTaskId(id);
-      toast.dismiss();
-      toast.success('Cloning started.');
-      pollCloningStatus(id);
-    } catch (err: any) {
-      toast.dismiss();
-      if (axios.isCancel(err)) {
-        toast.error('Cloning cancelled.');
-      } else {
-        toast.error('Failed to start cloning.');
-        console.error('Clone error:', err);
-      }
-      setIsCloning(false);
-    }
+    //   const id = res.data.task_id;
+    //   setTaskId(id);
+    //   toast.dismiss();
+    //   toast.success('Cloning started.');
+    //   pollCloningStatus(id);
+    // } catch (err: any) {
+    //   toast.dismiss();
+    //   if (axios.isCancel(err)) {
+    //     toast.error('Cloning cancelled.');
+    //   } else {
+    //     toast.error('Failed to start cloning.');
+    //     console.error('Clone error:', err);
+    //   }
+    //   setIsCloning(false);
+    // }
+    setSuccess(true);
   };
 
   const handleCancelClone = async () => {
@@ -139,27 +178,47 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
   
     pollRef.current = window.setInterval(async () => {
       try {
-        const res = await axios.get(`${VOICE_ENGINE_API_BASE_URL}/task-status/${taskId}`);
-        const { state } = res.data;
+        const res = await axios.get(`${VOICE_ENGINE_API_BASE_URL}/cloning/task-status/${taskId}`, {
+          responseType: 'blob',
+        });
   
-        if (['SUCCESS', 'FAILURE', 'REVOKED'].includes(state)) {
+        if (res.headers['content-type'] === 'audio/wav') {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setIsCloning(false);
           setTaskId(null);
   
-          if (state === 'SUCCESS') {
-            toast.success('Voice cloned successfully.');
-            setSuccess(true); // show success UI
-          } else {
-            toast.error(`Cloning ${state.toLowerCase()}.`);
-          }
+          const blob = new Blob([res.data], { type: 'audio/wav' });
+          const url = URL.createObjectURL(blob);
+          setAudioUrl(url);
+          setPreviewFailed(false);
+          setSuccess(true);
+          toast.success('Voice cloned successfully.');
+        } else {
+          // The task hasn't completed yet, backend still returns JSON
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const json = JSON.parse(reader.result as string);
+              const { state } = json;
+              if (['FAILURE', 'REVOKED'].includes(state)) {
+                clearInterval(pollRef.current!);
+                pollRef.current = null;
+                setIsCloning(false);
+                setTaskId(null);
+                toast.error(`Cloning ${state.toLowerCase()}.`);
+              }
+            } catch (e) {
+              console.error('Failed to parse JSON during polling.', e);
+            }
+          };
+          reader.readAsText(res.data);
         }
       } catch (err) {
         console.error('Polling error:', err);
       }
     }, 4000);
-  };
+  };  
   
   const handleStartEngine = async () => {
     toast.loading('Starting Voice Engine...');
@@ -201,14 +260,12 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
   };
 
   const togglePlayback = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      audio.play();
-      setIsPlaying(true);
+    if (!audioSound || !playFn || !pauseFn) return;
+  
+    if (isPlaying) {
+      pauseFn();
     } else {
-      audio.pause();
-      setIsPlaying(false);
+      playFn();
     }
   };
 
@@ -219,23 +276,30 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
           <div className={styles.successContainer}>
             <CheckCircle size={50} className={styles.successIcon} />
             <h2 className={styles.successTitle}>Voice Cloned Successfully</h2>
-            <div className={styles.voiceTag}>
+            <div className={styles.voiceTagWithButton}>
               <div className={styles.defaultAvatar} />
               <span>{voiceName || 'Unnamed Voice'}</span>
+              <div
+                className={styles.tooltipWrapper}
+                data-tooltip={isPlaying ? 'Pause' : 'Play'}
+              >
+                <button
+                  onClick={togglePlayback}
+                  className={styles.inlinePlayButton}
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
+                  disabled={!audioUrl || !playFn || previewFailed}
+                  >
+                  {!audioUrl && !previewFailed ? (
+                    <Loader2 size={18} className={styles.spinner} />
+                  ) : isPlaying ? (
+                    <Pause size={18} />
+                  ) : (
+                    <Play size={18} />
+                  )}
+                </button>
+              </div>
             </div>
             <p className={styles.successSubtitle}>Your voice is ready for use.</p>
-
-            <div className={styles.audioPreviewBox}>
-              <audio
-                ref={audioRef}
-                src={`${VOICE_ENGINE_API_BASE_URL}/cloning/output.wav`}
-                onEnded={() => setIsPlaying(false)}
-              />
-              <button onClick={togglePlayback} className={styles.previewBtn}>
-                {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-              </button>
-              <span className={styles.previewText}>Preview Output</span>
-            </div>
 
             <div className={styles.successActions}>
               <button className={styles.secondaryBtn} onClick={() => setSuccess(false)}>
@@ -249,7 +313,14 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
                 onClick={handleSave}
                 disabled={isSaving}
               >
-                {isSaving ? <Loader2 className={styles.spinner} /> : 'Save Voice'}
+                {isSaving ? (
+                  <Loader2 className={styles.spinner} />
+                ) : (
+                  <>
+                    <Heart size={16} />
+                    Save Voice
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -340,21 +411,29 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
 
         <div className={styles.actionRow}>
         {engineOnline ? (
+          // <button
+          //   className={styles.primaryBtn}
+          //   onClick={isCloning ? handleCancelClone : handleClone}
+          //   disabled={audioFiles.length === 0 || isCloning && !taskId}
+          // >
+          //   {isCloning ? (
+          //     <>
+          //       <span className={styles.spinner}></span> Cancel
+          //     </>
+          //   ) : (
+          //     <>
+          //       <Send size={16} /> Clone Voice
+          //     </>
+          //   )}
+          // </button>
+
           <button
             className={styles.primaryBtn}
-            onClick={isCloning ? handleCancelClone : handleClone}
-            disabled={audioFiles.length === 0 || isCloning && !taskId}
+            onClick={handleClone}
           >
-            {isCloning ? (
-              <>
-                <span className={styles.spinner}></span> Cancel
-              </>
-            ) : (
-              <>
-                <Send size={16} /> Clone Voice
-              </>
-            )}
+            <Send size={16} /> Clone Voice
           </button>
+
         ) : (
           <button className={styles.primaryBtn} onClick={handleStartEngine}>
             Start Voice Engine

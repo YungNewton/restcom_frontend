@@ -254,34 +254,6 @@
   justify-content: center;
 }
 
-.voiceTag {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 0.3rem 0.6rem;
-  cursor: default;
-  flex-shrink: 0;
-}
-
-.voiceTag:hover {
-  background: #222;
-}
-
-.voiceTag span {
-  font-size: 0.85rem;
-  color: #bbb;
-}
-
-.voiceTag img {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
 .defaultAvatar {
   width: 24px;
   height: 24px;
@@ -316,6 +288,86 @@
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+.voiceTagWithButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.voiceTagWithButton span {
+  font-size: 0.85rem;
+  color: #bbb;
+}
+
+.voiceTagWithButton .defaultAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00d4ff, #ff4ecd);
+}
+
+.inlinePlayButton {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bbb;
+  transition: color 0.2s ease;
+}
+
+.inlinePlayButton:hover {
+  color: white;
+  background-color: transparent;
+}
+
+/* Tooltip style matching your minimal UI */
+.tooltipWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltipWrapper::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111;
+  color: #eee;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  z-index: 10;
+}
+
+.tooltipWrapper:hover::after {
+  opacity: 1;
+}
+
+.voiceTagWithButton .tooltipWrapper {
+  margin-left: 1rem;
+}
+
+.inlinePlayButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 
 /* === Responsive === */
 
