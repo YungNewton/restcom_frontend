@@ -58,7 +58,7 @@ const SpeechToText = ({ engineOnline }: Props) => {
       const formData = new FormData();
       formData.append("task_id", taskId);
       try {
-        await axios.post(`${VOICE_ENGINE_API_BASE_URL}/stt/cancel-task/`, formData);
+        await axios.post(`${VOICE_ENGINE_API_BASE_URL}/cancel-task/`, formData);
       } catch (err) {
         toast.error('Failed to cancel task.');
       }
@@ -103,7 +103,7 @@ const SpeechToText = ({ engineOnline }: Props) => {
 
     pollRef.current = window.setInterval(async () => {
       try {
-        const res = await axios.get(`${VOICE_ENGINE_API_BASE_URL}/stt/task-status/${taskId}`);
+        const res = await axios.get(`${VOICE_ENGINE_API_BASE_URL}/task-status/${taskId}`);
         const { state, result } = res.data;
 
         if (['SUCCESS', 'FAILURE', 'REVOKED'].includes(state)) {
