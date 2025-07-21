@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import axios from 'axios';
 import { Upload, Info, CheckCircle, Trash, ChevronDown, Send, Play, Pause, Loader2, Heart } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import useSound from 'use-sound';
 import styles from './VoiceCloning.module.css';
 import VoiceLibrary from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary';
 
@@ -10,26 +9,25 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const VOICE_ENGINE_API_BASE_URL = import.meta.env.VITE_VOICE_ENGINE_API_BASE_URL;
 
 const sampleVoiceTexts = [
-  "Hi there! I'm your new AI assistant, ready to make things easier and faster.",
-  "Welcome aboard! Let’s turn your ideas into something amazing together.",
-  "Success is not just a goal — it’s a journey. Let’s take the first step.",
-  "This is how your voice can sound — crisp, confident, and full of life.",
-  "Testing one, two, three... This is your voice, reimagined by AI.",
-  "From boardrooms to bedtime stories, I can speak in your style anywhere.",
-  "It’s a great day to build something meaningful. Let’s begin.",
-  "You bring the message, I’ll bring the voice. Let’s do this.",
-  "Think of this as your vocal business card — sleek and professional.",
-  "Creativity meets technology. Your voice just leveled up.",
-  "Hello world. This is what modern voice cloning sounds like.",
-  "Imagine this voice reading your next audiobook — smooth, right?",
-  "Why type when you can speak? Let’s bring your words to life.",
-  "Recording in progress. This is a test of style, tone, and clarity.",
-  "Your voice. Your energy. Just a lot more scalable.",
-  "Here’s what you sound like — clear, consistent, and unforgettable.",
-  "This voice is AI-powered, but it still sounds just like you.",
-  "Hi! If you’re hearing this, cloning was a success.",
-  "Voice check complete. You’re sounding sharp and ready to go.",
-  "Let your words flow like this — smooth, expressive, and natural."
+  "Hi there! I'm your AI assistant, ready to help you sound clear, confident, and consistent—wherever your voice is needed.",
+  
+  "Voice cloning lets you turn a short sample into a full voice model. The result sounds natural, expressive, and uniquely yours.",
+  
+  "This sample shows how your cloned voice can speak with clarity, rhythm, and warmth, perfect for narration or conversations.",
+  
+  "Imagine not needing to record every line. Your AI voice can speak for you, on demand, with the tone and style you prefer.",
+  
+  "Welcome! You're about to hear your cloned voice. It learns from how you speak and brings that style to anything you write.",
+  
+  "A short audio and transcript is all it takes. The system learns your voice and reproduces it with surprising accuracy.",
+  
+  "This sample shows how your voice flows between phrases, handles punctuation naturally, and captures your speaking style.",
+  
+  "Want to make a podcast or tutorial? Voice cloning lets you write the script while your AI voice delivers it seamlessly.",
+  
+  "Hi! I'm reading this to show how your cloned voice handles tone, pacing, and emotion—just like you would say it out loud.",
+  
+  "Voice cloning saves time and effort. You can now create spoken content with your voice, without needing to record again."
 ];
 
 interface Props {
@@ -51,44 +49,15 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
   const pollRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
-  const [text] = useState(
-    sampleVoiceTexts[Math.floor(Math.random() * sampleVoiceTexts.length)]
-  );
-  
-  const [playFn, setPlayFn] = useState<(() => void) | null>(null);
-  const [pauseFn, setPauseFn] = useState<(() => void) | null>(null);
-  const [audioSound, setAudioSound] = useState<any>(null);
+  const getRandomSampleText = () =>
+  sampleVoiceTexts[Math.floor(Math.random() * sampleVoiceTexts.length)];
+  const alreadyHandledRef = useRef(false);
 
-  const [play, { pause, sound }] = useSound(audioUrl || "", {
-    format: ['wav'],
-    interrupt: true,
-    soundEnabled: !!audioUrl, // Don't preload unless URL is valid
-  });
-  
+  const [text, setText] = useState(getRandomSampleText());
 
-  useEffect(() => {
-    setPlayFn(() => play);
-    setPauseFn(() => pause);
-    setAudioSound(sound);
-  
-    return () => {
-      sound?.unload();
-    };
-  }, [play, pause, sound]);  
-    
-  useEffect(() => {
-    if (!audioSound) return;
-  
-    audioSound.on('play', () => setIsPlaying(true));
-    audioSound.on('pause', () => setIsPlaying(false));
-    audioSound.on('end', () => setIsPlaying(false));
-  
-    return () => {
-      audioSound.off('play');
-      audioSound.off('pause');
-      audioSound.off('end');
-    };
-  }, [audioSound]);  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  console.debug('[useSound] audioUrl:', audioUrl);
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -115,45 +84,48 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
   };
 
   const handleClone = async () => {
-    // if (audioFiles.length === 0) return toast.error('Upload an audio file.');
-    // if (!transcript.trim()) return toast.error('Transcript is required.');
+    alreadyHandledRef.current = false;
+    if (audioFiles.length === 0) return toast.error('Upload an audio file.');
+    if (!transcript.trim()) return toast.error('Transcript is required.');
   
-    // const formData = new FormData();
-    // formData.append('audio', audioFiles[0]); // Only first file is used for cloning
-    // formData.append('prompt_transcript', transcript.trim());
-    // formData.append('text', text); // internal speech
-    // formData.append('language', 'en');
+    const formData = new FormData();
+    formData.append('audio', audioFiles[0]); // Only first file is used for cloning
+    formData.append('prompt_transcript', transcript.trim());
+    formData.append('text', text); // internal speech
+    formData.append('language', 'en');
   
-    // const controller = new AbortController();
-    // abortControllerRef.current = controller;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
   
-    // try {
-    //   setPreviewFailed(false);
-    //   setIsCloning(true);
-    //   toast.loading('Cloning voice...');
-    //   const res = await axios.post(`${VOICE_ENGINE_API_BASE_URL}/cloning/clone/`, formData, {
-    //     signal: controller.signal,
-    //   });
+    try {
+      setPreviewFailed(false);
+      setIsCloning(true);
+      toast.loading('Cloning voice...');
+      const res = await axios.post(`${VOICE_ENGINE_API_BASE_URL}/cloning/clone/`, formData, {
+        signal: controller.signal,
+      });
   
-    //   const id = res.data.task_id;
-    //   setTaskId(id);
-    //   toast.dismiss();
-    //   toast.success('Cloning started.');
-    //   pollCloningStatus(id);
-    // } catch (err: any) {
-    //   toast.dismiss();
-    //   if (axios.isCancel(err)) {
-    //     toast.error('Cloning cancelled.');
-    //   } else {
-    //     toast.error('Failed to start cloning.');
-    //     console.error('Clone error:', err);
-    //   }
-    //   setIsCloning(false);
-    // }
-    setSuccess(true);
+      const id = res.data.task_id;
+      setTaskId(id);
+      toast.dismiss();
+      toast.success('Cloning started.');
+      pollCloningStatus(id);
+    } catch (err: any) {
+      toast.dismiss();
+      if (axios.isCancel(err)) {
+        toast.error('Cloning cancelled.');
+      } else {
+        toast.error('Failed to start cloning.');
+        console.error('Clone error:', err);
+      }
+      setIsCloning(false);
+    }
+    // setSuccess(true);
   };
 
   const handleCancelClone = async () => {
+    alreadyHandledRef.current = false;
+
     if (pollRef.current) clearInterval(pollRef.current);
     if (abortControllerRef.current) abortControllerRef.current.abort();
   
@@ -183,6 +155,9 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
         });
   
         if (res.headers['content-type'] === 'audio/wav') {
+          if (alreadyHandledRef.current) return; // 🧠 prevent double success
+          alreadyHandledRef.current = true;
+
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setIsCloning(false);
@@ -191,6 +166,7 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
           const blob = new Blob([res.data], { type: 'audio/wav' });
           const url = URL.createObjectURL(blob);
           setAudioUrl(url);
+          setIsPlaying(false);
           setPreviewFailed(false);
           setSuccess(true);
           toast.success('Voice cloned successfully.');
@@ -260,14 +236,25 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
   };
 
   const togglePlayback = () => {
-    if (!audioSound || !playFn || !pauseFn) return;
+    const audio = audioRef.current;
+    if (!audio) return;
   
-    if (isPlaying) {
-      pauseFn();
+    console.debug('[togglePlayback] native <audio>', {
+      currentTime: audio.currentTime,
+      paused: audio.paused,
+    });
+  
+    if (audio.paused) {
+      audio.play().then(() => {
+        setIsPlaying(true);
+      }).catch((err) => {
+        console.error('Audio play error:', err);
+      });
     } else {
-      playFn();
+      audio.pause();
+      setIsPlaying(false);
     }
-  };
+  };  
 
   if (success) {
     return (
@@ -283,11 +270,17 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
                 className={styles.tooltipWrapper}
                 data-tooltip={isPlaying ? 'Pause' : 'Play'}
               >
+                <audio
+                  ref={audioRef}
+                  src={audioUrl || undefined}
+                  onEnded={() => setIsPlaying(false)}
+                  preload="auto"
+                />
                 <button
                   onClick={togglePlayback}
                   className={styles.inlinePlayButton}
                   aria-label={isPlaying ? 'Pause' : 'Play'}
-                  disabled={!audioUrl || !playFn || previewFailed}
+                  disabled={!audioUrl || previewFailed}
                   >
                   {!audioUrl && !previewFailed ? (
                     <Loader2 size={18} className={styles.spinner} />
@@ -302,7 +295,13 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
             <p className={styles.successSubtitle}>Your voice is ready for use.</p>
 
             <div className={styles.successActions}>
-              <button className={styles.secondaryBtn} onClick={() => setSuccess(false)}>
+            <button
+              className={styles.secondaryBtn}
+              onClick={() => {
+                setText(getRandomSampleText()); // 👈 shuffle sample
+                setSuccess(false);
+              }}
+            >
                 Clone Again
               </button>
               <button className={styles.primaryBtn} onClick={() => setActiveTab('tts')}>
@@ -411,28 +410,28 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
 
         <div className={styles.actionRow}>
         {engineOnline ? (
-          // <button
-          //   className={styles.primaryBtn}
-          //   onClick={isCloning ? handleCancelClone : handleClone}
-          //   disabled={audioFiles.length === 0 || isCloning && !taskId}
-          // >
-          //   {isCloning ? (
-          //     <>
-          //       <span className={styles.spinner}></span> Cancel
-          //     </>
-          //   ) : (
-          //     <>
-          //       <Send size={16} /> Clone Voice
-          //     </>
-          //   )}
-          // </button>
-
           <button
             className={styles.primaryBtn}
-            onClick={handleClone}
+            onClick={isCloning ? handleCancelClone : handleClone}
+            disabled={audioFiles.length === 0 || isCloning && !taskId}
           >
-            <Send size={16} /> Clone Voice
+            {isCloning ? (
+              <>
+                <span className={styles.spinner}></span> Cancel
+              </>
+            ) : (
+              <>
+                <Send size={16} /> Clone Voice
+              </>
+            )}
           </button>
+
+          // <button
+          //   className={styles.primaryBtn}
+          //   onClick={handleClone}
+          // >
+          //   <Send size={16} /> Clone Voice
+          // </button>
 
         ) : (
           <button className={styles.primaryBtn} onClick={handleStartEngine}>
