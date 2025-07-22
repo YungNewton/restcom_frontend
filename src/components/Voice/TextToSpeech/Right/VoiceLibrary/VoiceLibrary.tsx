@@ -55,15 +55,21 @@ const VoiceLibrary = ({
     const measure = () => {
       const height = voiceItemRef.current?.offsetHeight || 70;
       setItemHeight(height);
-      const reservedHeight = 250; // space for search, headers, padding, etc.
-      const available = window.innerHeight - reservedHeight;
+
+      // Adjust reserved height based on whether default voices are hidden
+      let reservedHeight = 250;
+      if (hideDefaultVoices) {
+        reservedHeight -= 100; // reclaim space from unused default section
+      }
+
+      const available = Math.max(100, window.innerHeight - reservedHeight);
       setContainerHeight(available);
     };
 
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, []);
+  }, [hideDefaultVoices]);
 
   const filteredCloned = clonedVoices
     .filter(v => v.name.toLowerCase().includes(search.toLowerCase()))
@@ -134,15 +140,19 @@ const VoiceLibrary = ({
           </button>
         </div>
         <div
-          className={styles.voiceList}
-          style={{
-            maxHeight:
-              activeView === 'cloned'
-                ? itemHeight * itemsVisibleInFull
-                : activeView === 'default'
-                ? 0
-                : itemHeight * itemsVisibleCollapsed,
-          }}
+          className={`${styles.voiceList} ${hideDefaultVoices ? styles.allVisible : ''}`}
+          style={
+            hideDefaultVoices
+              ? undefined
+              : {
+                  maxHeight:
+                    activeView === 'cloned'
+                      ? containerHeight
+                      : activeView === 'default'
+                      ? 0
+                      : itemHeight * itemsVisibleCollapsed,
+                }
+          }
         >
           {filteredCloned.map((voice, i) => renderVoiceItem(voice, false, i === 0))}
         </div>
@@ -165,7 +175,7 @@ const VoiceLibrary = ({
             style={{
               maxHeight:
                 activeView === 'default'
-                  ? itemHeight * itemsVisibleInFull
+                  ? containerHeight
                   : activeView === 'cloned'
                   ? 0
                   : itemHeight * itemsVisibleCollapsed,
