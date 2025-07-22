@@ -7,7 +7,12 @@ type ProtectedRouteProps = {
 }
 
 const ProtectedRoute = ({ Component }: ProtectedRouteProps): ReactElement => {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, loading } = useAuth()
+
+  if (loading) {
+    return <div>Loading...</div> // or a spinner
+  }
+
   return isAuthenticated ? <Component /> : <Navigate to="/login" replace />
 }
 

@@ -2,48 +2,53 @@ import { createContext, useContext, useEffect, useState } from 'react'
 
 type AuthContextType = {
   isAuthenticated: boolean
-  login: (options?: { token: string; remember: boolean }) => void
-  logout: () => void
+  loading: boolean
+  login: () => void
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-    const [isAuthenticated, setIsAuthenticated] = useState(false)
-    const [loading, setLoading] = useState(true)
-  
-    useEffect(() => {
-      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken')
-      setIsAuthenticated(!!token)
-      setLoading(false)
-    }, [])
-  
-    const login = (options?: { token: string; remember: boolean }) => {
-      if (options) {
-        const { token, remember } = options
-        const storage = remember ? localStorage : sessionStorage
-        storage.setItem('authToken', token)
-      }
-      setIsAuthenticated(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const login = () => {
+    setIsAuthenticated(true)
+  }
+
+  const logout = async () => {
+    try {
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/logout/`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch (e) {
+      console.error('Logout failed')
     }
-  
-    const logout = () => {
-      localStorage.clear()
-      sessionStorage.clear()
-      setIsAuthenticated(false)
-    }
-  
-    return (
-      <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
-        {!loading && children}
-      </AuthContext.Provider>
-    )
-  }  
+    setIsAuthenticated(false)
+  }
+
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/me/`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+      .then(res => {
+        if (res.ok) setIsAuthenticated(true)
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <AuthContext.Provider value={{ isAuthenticated, loading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider')
   return context
 }

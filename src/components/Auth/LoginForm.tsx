@@ -24,6 +24,7 @@ const LoginForm = () => {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/login/`, {
         method: 'POST',
+        credentials: 'include', // ✅ send cookies
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: form.identifier,
@@ -35,14 +36,7 @@ const LoginForm = () => {
       const data = await res.json()
 
       if (res.ok) {
-        const storage = rememberMe ? localStorage : sessionStorage
-        storage.setItem('refreshToken', data.refresh)
-        storage.setItem('userEmail', data.user.email)
-        storage.setItem('username', data.user.username)
-
-        // Call login() from context
-        login({ token: data.access, remember: rememberMe })
-
+        login() // ✅ no need to pass token
         toast.success('Login successful!')
         navigate('/')
       } else {
