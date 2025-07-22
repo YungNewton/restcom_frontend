@@ -197,6 +197,21 @@
   transition: box-shadow 0.25s ease;
 }
 
+.highlighted {
+  background: rgba(0, 120, 255, 0.08);
+  border-radius: 8px;
+  animation: fadeHighlight 2s ease forwards;
+}
+
+@keyframes fadeHighlight {
+  0% {
+    background: rgba(0, 120, 255, 0.15);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 /* 📱 Responsive Queries */
 @media (max-width: 1024px) {
   .topRow {

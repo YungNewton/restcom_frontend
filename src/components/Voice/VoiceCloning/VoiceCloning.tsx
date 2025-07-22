@@ -4,6 +4,7 @@ import { Upload, Info, CheckCircle, Trash, ChevronDown, Send, Loader2, Heart } f
 import { toast } from 'react-hot-toast';
 import styles from './VoiceCloning.module.css';
 import VoiceLibrary from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary';
+import type { VoiceLibraryRef } from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary'; // 👈 import type
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -22,6 +23,8 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
   const [isSaving, setIsSaving] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const voiceLibraryRef = useRef<VoiceLibraryRef>(null);
+
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -82,6 +85,7 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
       });
   
       toast.dismiss();
+      voiceLibraryRef.current?.refreshLibrary(voiceName.trim());
       toast.success('Voice saved.');
     } catch (err: any) {
       toast.dismiss();
@@ -163,11 +167,12 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
         </div>
 
         <div className={styles.right}>
-          <VoiceLibrary
-            goToVoiceCloning={() => {}}
-            hideCloneButton
-            hideDefaultVoices
-          />
+        <VoiceLibrary
+          ref={voiceLibraryRef}
+          goToVoiceCloning={() => {}}
+          hideCloneButton
+          hideDefaultVoices
+        />
         </div>
       </div>
     );
@@ -265,6 +270,7 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
 
       <div className={styles.right}>
         <VoiceLibrary
+          ref={voiceLibraryRef}
           goToVoiceCloning={() => {}}
           hideCloneButton
           hideDefaultVoices
