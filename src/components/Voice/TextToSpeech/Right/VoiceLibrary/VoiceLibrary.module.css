@@ -1,4 +1,4 @@
-/* 📦 Layout Wrapper */
+/* 📦 Layout */
 .wrapper {
   display: flex;
   flex-direction: column;
@@ -21,7 +21,7 @@
   background: #1a1a1a;
   border: 1px solid #333;
   border-radius: 8px;
-  padding: 0rem 0.75rem;
+  padding: 0 0.75rem;
 }
 
 .searchBox svg {
@@ -89,9 +89,33 @@
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  padding: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
 }
 
+.voiceItem:hover {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.voiceItem:hover .avatarBox {
+  box-shadow: 0 0 8px rgba(0, 115, 255, 0.4);
+}
+
+.highlighted {
+  background: rgba(0, 120, 255, 0.08);
+  border-radius: 8px;
+  animation: fadeHighlight 2s ease forwards;
+}
+
+@keyframes fadeHighlight {
+  0% { background: rgba(0, 120, 255, 0.15); }
+  100% { background: transparent; }
+}
+
+/* 🧑‍🦱 Avatar */
 .avatarBox {
   width: 34px;
   height: 34px;
@@ -100,18 +124,15 @@
   flex-shrink: 0;
 }
 
-.avatarBox img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
-/* Default avatar */
+.avatarBox img,
 .defaultAvatar {
   width: 100%;
   height: 100%;
   border-radius: 50%;
+  object-fit: cover;
+}
+
+.defaultAvatar {
   background: linear-gradient(135deg, #00d4ff, #ff4ecd);
 }
 
@@ -154,87 +175,193 @@
   min-height: 0;
 }
 
-.voiceList.threeVisible {
-  max-height: calc(3 * 55px);
+.voiceList.threeVisible { max-height: calc(3 * 55px); }
+.voiceList.sixVisible { max-height: calc(6 * 70px); }
+.voiceList.noneVisible { max-height: 0; overflow: hidden; }
+
+.voiceList.allVisible.threeVisible { max-height: calc(6 * 55px); }
+.voiceList.allVisible.sixVisible { max-height: calc(12 * 70px); }
+
+/* 🧠 Tooltip */
+.tooltipWrapper {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
 }
 
-.voiceList.sixVisible {
-  max-height: calc(6 * 70px);
+.tooltipWrapper::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: -50%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #222;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 10;
 }
 
-.voiceList.noneVisible {
-  max-height: 0;
-  overflow: hidden;
+.tooltipWrapper:hover::after {
+  opacity: 1;
 }
 
-/* All Visible = double max height */
-.voiceList.allVisible.threeVisible {
-  max-height: calc(6 * 55px);
+.tooltipWrapper button {
+  background: none;
 }
 
-.voiceList.allVisible.sixVisible {
-  max-height: calc(12 * 70px);
+.tooltipWrapper button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.voiceItem {
+/* 🔽 Dropdown */
+.dropdownWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdownWrapper button {
+  background: none;
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  background: #222;
+  color: #fff;
+  border: 1px solid #333;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  padding: 4px 0;
+  min-width: 120px;
+  z-index: 20;
+  font-size: 0.875rem;
+}
+
+.dropdownMenu button {
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.dropdownMenu button:hover {
+  background-color: #333;
+}
+
+/* ✏️ Rename */
+.renameForm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+  width: auto;
+}
+
+.renameInput {
+  font-size: 0.875rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #444;
+  background: #111;
+  color: #fff;
+  outline: none;
+  width: 150px;
+  max-width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.renameIconBtn {
+  background: none;
+  border: none;
+  padding: 2px;
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 10px;
-  transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
-}
-
-.voiceItem:hover {
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  justify-content: center;
+  color: #ccc;
   cursor: pointer;
-  transition: background 0.25s ease, box-shadow 0.25s ease;
+  transition: color 0.2s ease;
+  flex-shrink: 0;
 }
 
-.voiceItem:hover .avatarBox {
-  box-shadow: 0 0 8px rgba(0, 115, 255, 0.4);
-  transition: box-shadow 0.25s ease;
+.renameIconBtn:hover {
+  color: white;
+  background:none;
 }
 
-.highlighted {
-  background: rgba(0, 120, 255, 0.08);
-  border-radius: 8px;
-  animation: fadeHighlight 2s ease forwards;
+.renameButtons {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+  align-items: center;
+  background: none;
+  margin-bottom:0.4rem; 
 }
 
-@keyframes fadeHighlight {
-  0% {
-    background: rgba(0, 120, 255, 0.15);
-  }
-  100% {
-    background: transparent;
-  }
+/* 🗑️ Delete Confirm Toast */
+.confirmToast {
+  display: flex;
+  flex-direction: column;
+  color: white;
+  font-size: 0.875rem;
 }
 
-/* 📱 Responsive Queries */
+.confirmButtons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.confirmButton {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.confirmDelete {
+  background: #e74c3c;
+  color: white;
+}
+
+.confirmDelete:hover {
+  background: #c0392b;
+}
+
+.confirmCancel {
+  background: #555;
+  color: white;
+}
+
+.confirmCancel:hover {
+  background: #444;
+}
+
+/* 📱 Responsive */
 @media (max-width: 1024px) {
-  .topRow {
-    gap: 0.8rem;
-  }
+  .topRow { gap: 0.8rem; }
 }
 
 @media (max-width: 768px) {
-  .wrapper {
-    gap: 1rem;
-  }
+  .wrapper { gap: 1rem; }
 
-  .searchBox {
-    padding: 0.3rem 0.6rem;
-  }
+  .searchBox { padding: 0.3rem 0.6rem; }
+  .searchBox input { font-size: 0.85rem; }
 
-  .searchBox input {
-    font-size: 0.85rem;
-  }
-
-  .cloneButton {
-    padding: 0.6rem;
-  }
+  .cloneButton { padding: 0.6rem; }
 
   .sectionHeader {
     flex-direction: column;
@@ -242,66 +369,27 @@
     gap: 0.4rem;
   }
 
-  .viewAll {
-    align-self: flex-end;
-  }
+  .viewAll { align-self: flex-end; }
 
-  .voiceItem {
-    gap: 0.7rem;
-    padding: 0.4rem 0;
-  }
+  .voiceItem { gap: 0.7rem; padding: 0.4rem 0; }
+  .avatarBox { width: 30px; height: 30px; }
 
-  .avatarBox {
-    width: 30px;
-    height: 30px;
-  }
+  .voiceName { font-size: 0.85rem; }
+  .voiceMeta { font-size: 0.7rem; }
 
-  .voiceName {
-    font-size: 0.85rem;
-  }
-
-  .voiceMeta {
-    font-size: 0.7rem;
-  }
-
-  .voiceActions {
-    gap: 0.6rem;
-  }
-
-  .voiceActions svg {
-    width: 16px;
-    height: 16px;
-  }
+  .voiceActions { gap: 0.6rem; }
+  .voiceActions svg { width: 16px; height: 16px; }
 }
 
 @media (max-width: 480px) {
-  .searchBox {
-    padding: 0.25rem 0.5rem;
-  }
+  .searchBox { padding: 0.25rem 0.5rem; }
+  .searchBox input { font-size: 0.8rem; }
 
-  .searchBox input {
-    font-size: 0.8rem;
-  }
+  .cloneButton { padding: 0.5rem; font-size: 0.9rem; }
 
-  .cloneButton {
-    padding: 0.5rem;
-    font-size: 0.9rem;
-  }
+  .sectionHeader { font-size: 0.9rem; }
+  .voiceName { font-size: 0.8rem; }
+  .voiceMeta { font-size: 0.7rem; }
 
-  .sectionHeader {
-    font-size: 0.9rem;
-  }
-
-  .voiceName {
-    font-size: 0.8rem;
-  }
-
-  .voiceMeta {
-    font-size: 0.7rem;
-  }
-
-  .voiceActions svg {
-    width: 14px;
-    height: 14px;
-  }
+  .voiceActions svg { width: 14px; height: 14px; }
 }
