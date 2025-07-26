@@ -350,6 +350,10 @@
   background: #444;
 }
 
+.section + .section {
+  margin-top: 0rem; /* reduce this as needed */
+}
+
 /* 📱 Responsive */
 @media (max-width: 1024px) {
   .topRow { gap: 0.8rem; }

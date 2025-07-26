@@ -15,6 +15,7 @@ interface VoiceLibraryProps {
   goToVoiceCloning: () => void;
   hideCloneButton?: boolean;
   hideDefaultVoices?: boolean;
+  setSelectedVoiceFromLibrary?: (voice: Voice) => void;
 }
 
 export interface VoiceLibraryRef {
@@ -33,7 +34,7 @@ interface Voice {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
-  ({ goToVoiceCloning, hideCloneButton = false, hideDefaultVoices = false }, ref) => {
+  ({ goToVoiceCloning, hideCloneButton = false, hideDefaultVoices = false, setSelectedVoiceFromLibrary }, ref) =>  {
     const [search, setSearch] = useState('');
     const [clonedVoices, setClonedVoices] = useState<Voice[]>([]);
     const [defaultVoices, setDefaultVoices] = useState<Voice[]>([]);
@@ -283,6 +284,16 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
                 <div className={styles.dropdownMenu}>
                   {!isDefault && (
                     <>
+                    {setSelectedVoiceFromLibrary && (
+                      <button
+                        onClick={() => {
+                          setSelectedVoiceFromLibrary(voice);
+                          setActionMenuId(null);
+                        }}
+                      >
+                        Use Voice
+                      </button>
+                    )}
                       <button onClick={() => {
                         setRenamingId(voice.id);
                         setNewName(voice.name);
@@ -338,8 +349,12 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
             <button
               className={styles.viewAll}
               onClick={() =>
-                setActiveView(activeView === 'cloned' ? 'both' : 'cloned')
-              }
+                setActiveView(
+                  activeView === 'cloned'
+                    ? 'both' // collapse it
+                    : 'cloned' // expand cloned, collapse default
+                )
+              }              
             >
               {activeView === 'cloned' ? 'Collapse' : 'View all'}
             </button>
@@ -355,15 +370,15 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
                 : ''
             }`}
             style={{
-              maxHeight: hideDefaultVoices
-                ? activeView === 'cloned'
-                  ? 12 * 55
-                  : 6 * 55
-                : activeView === 'cloned'
-                ? containerHeight
-                : activeView === 'default'
-                ? 0
-                : itemHeight * itemsVisibleCollapsed,
+              maxHeight:
+                hideDefaultVoices
+                  ? activeView === 'cloned'
+                    ? 12 * 55 // fully expanded
+                    : 6 * 55 // collapsed
+                  : activeView === 'cloned'
+                  ? containerHeight
+                  : itemHeight * itemsVisibleCollapsed
+
             }}
           >
             {filteredCloned.map((voice, i) =>
@@ -379,8 +394,12 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
               <button
                 className={styles.viewAll}
                 onClick={() =>
-                  setActiveView(activeView === 'default' ? 'both' : 'default')
-                }
+                  setActiveView(
+                    activeView === 'default'
+                      ? 'both' // collapse it
+                      : 'default' // expand default, collapse cloned
+                  )
+                }                
               >
                 {activeView === 'default' ? 'Collapse' : 'View all'}
               </button>
@@ -390,10 +409,9 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
               style={{
                 maxHeight:
                   activeView === 'default'
-                    ? containerHeight
-                    : activeView === 'cloned'
-                    ? 0
-                    : itemHeight * itemsVisibleCollapsed,
+                    ? containerHeight // fully expanded
+                    : itemHeight * itemsVisibleCollapsed // collapsed
+
               }}
             >
               {filteredDefault.map((voice, i) =>

@@ -342,3 +342,63 @@
     height: 12px;
   }
 }
+
+.seedOption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid #333;
+}
+
+.seedLabel {
+  color: #ccc;
+  font-size: 0.8rem;
+}
+
+.seedInputWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.seedInput {
+  flex: 1;
+  padding: 0.5rem 0.8rem;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: white;
+  font-size: 0.85rem;
+}
+
+.seedConfirmBtn {
+  background: none;
+  border: none;
+  color: #0073ff;
+  cursor: pointer;
+  padding: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.seedConfirmBtn:hover {
+  background: #1e1e1e;
+}
+
+.randomOption {
+  padding: 0.8rem 1rem;
+  color: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.randomOption:hover {
+  background: #2a2a2a;
+}
+

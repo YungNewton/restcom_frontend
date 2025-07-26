@@ -11,6 +11,7 @@ const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const Voice = () => {
   const [activeTab, setActiveTab] = useState<'cloning' | 'tts' | 'stt'>('tts');
   const [engineOnline, setEngineOnline] = useState(true);
+  const [selectedVoiceForTTS, setSelectedVoiceForTTS] = useState<any | null>(null);
 
   useEffect(() => {
     const eventSource = new EventSource(`${VITE_API_BASE_URL}/voice/status/stream`);
@@ -79,20 +80,24 @@ const Voice = () => {
       </div>
 
       <div className={styles.content}>
-        {activeTab === 'cloning' && (
-          <VoiceCloning 
-            setActiveTab={setActiveTab} 
-            engineOnline={engineOnline} 
-          />        
-        )}
+      {activeTab === 'cloning' && (
+        <VoiceCloning 
+          setActiveTab={setActiveTab} 
+          engineOnline={engineOnline}
+          setSelectedVoiceForTTS={setSelectedVoiceForTTS}
+        />        
+      )}
 
-        {activeTab === 'tts' && (
-          <TextToSpeech 
-            setActiveTab={setActiveTab} 
-            engineOnline={engineOnline} 
-            setEngineOnline={setEngineOnline} 
-          />
-        )}
+      {activeTab === 'tts' && (
+        <TextToSpeech 
+          setActiveTab={setActiveTab} 
+          engineOnline={engineOnline} 
+          setEngineOnline={setEngineOnline}
+          externalSelectedVoice={selectedVoiceForTTS}
+          clearExternalVoice={() => setSelectedVoiceForTTS(null)}
+        />
+      )}
+
 
         {activeTab === 'stt' && (
           <SpeechToText 

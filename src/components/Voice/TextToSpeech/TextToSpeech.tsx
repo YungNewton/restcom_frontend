@@ -12,24 +12,22 @@ import avatar from '../../../assets/voice-avatar.png';
 import Settings from './Right/Settings/Settings';
 import VoiceLibrary from './Right/VoiceLibrary/VoiceLibrary';
 
-const voices = [
-  { id: 'default_male', name: 'Default Male', avatar },
-  { id: 'default_female', name: 'Default Female', avatar },
-  { id: 'isaac', name: 'Isaac', avatar },
-];
-
 interface TextToSpeechProps {
   setActiveTab: (tab: 'cloning' | 'tts' | 'stt') => void;
   engineOnline: boolean;
+  externalSelectedVoice?: { id: string; name: string; avatar: string } | null;
+  clearExternalVoice?: () => void;
   setEngineOnline: (status: boolean) => void;
 }
 
 const TextToSpeech: React.FC<TextToSpeechProps> = ({
   setActiveTab,
   engineOnline,
+  externalSelectedVoice,
+  clearExternalVoice,
 }) => {
+
   const [text, setText] = useState('');
-  const [selectedVoice, setSelectedVoice] = useState(voices[0]);
   const [showPlayback, setShowPlayback] = useState(false);
 
   const [dialogueMode, setDialogueMode] = useState(false);
@@ -40,7 +38,8 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
   const [language, setLanguage] = useState('English');
   const [autoDetect, setAutoDetect] = useState(false);
   const [fileName, setFileName] = useState('output');
-  const [fileFormat, setFileFormat] = useState('mp3');
+  const [fileFormat, setFileFormat] = useState('wav');
+  const [seed, setSeed] = useState('-1');
 
   const [activeRightTab, setActiveRightTab] = useState<'settings' | 'voiceLibrary'>('settings');
 
@@ -51,6 +50,13 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
 
   const [indicatorLeft, setIndicatorLeft] = useState('0px');
   const [indicatorWidth, setIndicatorWidth] = useState('0px');
+
+  const [selectedVoice, setSelectedVoice] = useState({
+    id: 'random',
+    name: 'Random',
+    avatar,
+  });
+
 
   useEffect(() => {
     const ref = tabsRef[activeRightTab];
@@ -68,6 +74,15 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
       });
     }
   }, [speakers]);  
+
+  useEffect(() => {
+    if (externalSelectedVoice) {
+      setSelectedVoice(externalSelectedVoice);
+      if (dialogueMode) setDialogueMode(false); // turn off dialogue mode
+      setSpeakers([]); // clear speakers
+      clearExternalVoice?.();
+    }
+  }, [externalSelectedVoice]);  
 
   const handleGenerate = () => {
     if (!engineOnline) {
@@ -276,11 +291,21 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
             setDialogueMode={setDialogueMode}
             setSpeakers={setSpeakers}
             goToVoiceLibrary={() => setActiveRightTab('voiceLibrary')}
+            seed={seed}
+            setSeed={setSeed}
           />
         ) : (
           <VoiceLibrary
             goToVoiceCloning={() => {
               setActiveTab('cloning');
+            }}
+            setSelectedVoiceFromLibrary={(voice) => {
+              setSelectedVoice({
+                id: voice.id,
+                name: voice.name,
+                avatar: voice.avatar_url || avatar
+              });
+              setActiveRightTab('settings');
             }}
           />
         )}

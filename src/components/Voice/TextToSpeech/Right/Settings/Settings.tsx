@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Check } from 'lucide-react';
 import styles from './Settings.module.css';
-
 import avatar from '../../../../../assets/voice-avatar.png';
+
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 
@@ -23,13 +23,9 @@ interface SettingsProps {
   setDialogueMode: (value: boolean) => void;
   setSpeakers: (speakers: { id: number; voiceName: string }[]) => void;
   goToVoiceLibrary: () => void;
+  seed: string;
+  setSeed: (value: string) => void;
 }
-
-const voices = [
-  { id: 'isaac', name: 'Isaac', avatar },
-  { id: 'default_male', name: 'Default Male', avatar },
-  { id: 'default_female', name: 'Default Female', avatar },
-];
 
 const Settings: React.FC<SettingsProps> = ({
   speed,
@@ -48,16 +44,25 @@ const Settings: React.FC<SettingsProps> = ({
   setDialogueMode,
   setSpeakers,
   goToVoiceLibrary,
+  seed: _,
+  setSeed,
 }) => {
   const [showVoiceDropdown, setShowVoiceDropdown] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [showFormatDropdown, setShowFormatDropdown] = useState(false);
+  const [seedInput, setSeedInput] = useState('');
 
   const languages = ['English'];
   const fileFormats = ['mp3', 'wav'];
 
-  const handleSelectVoice = (voice: typeof voices[0]) => {
-    setSelectedVoice(voice);
+  const handleSeedConfirm = () => {
+    const validSeed = seedInput.trim() === '' ? '-1' : seedInput.trim();
+    setSeed(validSeed);
+    setSelectedVoice({
+      id: 'seeded',
+      name: validSeed === '-1' ? 'Random' : `Seed: ${validSeed}`,
+      avatar: selectedVoice.avatar,
+    });
     setShowVoiceDropdown(false);
   };
 
@@ -77,16 +82,35 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
           {showVoiceDropdown && (
             <div className={styles.dropdown}>
-              {voices.map((voice) => (
-                <div
-                  key={voice.id}
-                  className={styles.dropdownItem}
-                  onClick={() => handleSelectVoice(voice)}
-                >
-                  <img src={voice.avatar} alt="avatar" className={styles.avatar} />
-                  <span>{voice.name}</span>
-                </div>
-              ))}
+              <div
+                className={styles.randomOption}
+                onClick={() => {
+                  setSeed('-1');
+                  setSeedInput('');
+                  setSelectedVoice({
+                    id: 'random',
+                    name: 'Random',
+                    avatar: avatar, // ✅ use imported avatar
+                  });
+                  setShowVoiceDropdown(false);
+                }}
+              >
+                <img src={avatar} alt="default avatar" className={styles.avatar} />
+                <span>Random</span>
+              </div>
+              <div className={styles.dropdownItem}>
+                <input
+                  type="text"
+                  className={styles.seedInput}
+                  placeholder="Enter seed i.e 0 - 4294967295"
+                  value={seedInput}
+                  onChange={(e) => setSeedInput(e.target.value)}
+                />
+                <button className={styles.confirmBtn} onClick={handleSeedConfirm}>
+                  <Check size={16} />
+                </button>
+              </div>
+
               <div
                 className={styles.manageVoices}
                 onClick={() => {
@@ -94,14 +118,14 @@ const Settings: React.FC<SettingsProps> = ({
                   goToVoiceLibrary();
                 }}
               >
-                Manage Voices →
+                Select from library →
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Dialogue Mode Toggle */}
+      {/* Dialogue Mode */}
       <div className={`${styles.section} ${styles.dialogueToggle}`}>
         <label className={styles.label}>Dialogue Mode</label>
         <div className={styles.toggleRow}>
@@ -120,7 +144,7 @@ const Settings: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      
+      {/* Speed */}
       <div className={styles.section}>
         <label className={styles.label}>Speed</label>
         <div className={styles.sliderWrapper}>
@@ -150,7 +174,7 @@ const Settings: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      {/* 🔥 Language */}
+      {/* Language */}
       <div className={styles.section}>
         <label className={styles.label}>Language</label>
         <div
@@ -195,7 +219,7 @@ const Settings: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      {/* 🔥 File Name */}
+      {/* File Name */}
       <div className={styles.section}>
         <label className={styles.label}>Output File Name</label>
         <input
@@ -207,7 +231,7 @@ const Settings: React.FC<SettingsProps> = ({
         />
       </div>
 
-      {/* 🔥 File Format */}
+      {/* File Format */}
       <div className={styles.section}>
         <label className={styles.label}>File Format</label>
         <div
@@ -235,7 +259,7 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
           )}
         </div>
-      </div>    
+      </div>
     </div>
   );
 };

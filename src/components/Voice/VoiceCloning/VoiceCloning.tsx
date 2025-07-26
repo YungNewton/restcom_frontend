@@ -5,15 +5,17 @@ import { toast } from 'react-hot-toast';
 import styles from './VoiceCloning.module.css';
 import VoiceLibrary from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary';
 import type { VoiceLibraryRef } from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary'; // 👈 import type
+import avatar from '../../../assets/voice-avatar.png';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 interface Props {
   setActiveTab: (tab: 'cloning' | 'tts' | 'stt') => void;
   engineOnline: boolean;
+  setSelectedVoiceForTTS: (voice: { id: string; name: string; avatar: string }) => void;
 }
 
-const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
+const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Props) => {
   const [voiceName, setVoiceName] = useState('');
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const [success, setSuccess] = useState(false);
@@ -148,7 +150,20 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
               >
                 Clone Again
               </button>
-              <button className={styles.primaryBtn} onClick={() => setActiveTab('tts')}>
+              <button
+                className={styles.primaryBtn}
+                onClick={async () => {
+                  if (!isSaving) {
+                    await handleSave();
+                  }
+                  setSelectedVoiceForTTS({
+                    id: 'cloned',
+                    name: voiceName,
+                    avatar,
+                  });
+                  setActiveTab('tts');
+                }}
+              >
                 Use Voice
               </button>
               {isSaving ? (
@@ -172,6 +187,14 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
           goToVoiceCloning={() => {}}
           hideCloneButton
           hideDefaultVoices
+          setSelectedVoiceFromLibrary={(voice) => {
+            setSelectedVoiceForTTS({
+              id: voice.id,
+              name: voice.name,
+              avatar: voice.avatar_url || avatar,
+            });
+            setActiveTab('tts');
+          }}
         />
         </div>
       </div>
@@ -274,6 +297,14 @@ const VoiceCloning = ({ setActiveTab, engineOnline }: Props) => {
           goToVoiceCloning={() => {}}
           hideCloneButton
           hideDefaultVoices
+          setSelectedVoiceFromLibrary={(voice) => {
+            setSelectedVoiceForTTS({
+              id: voice.id,
+              name: voice.name,
+              avatar: voice.avatar_url || avatar,
+            });
+            setActiveTab('tts');
+          }}          
         />
       </div>
     </div>
