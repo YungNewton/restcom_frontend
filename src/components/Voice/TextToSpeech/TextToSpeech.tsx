@@ -236,17 +236,6 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
       return;
     }
   
-    // ✅ Only handle random/seed for now
-    const isSeedOrRandom =
-      selectedVoice.id === 'random' ||
-      selectedVoice.id === 'seeded' || // from your Settings
-      selectedVoice.id === 'seed';
-  
-    if (!isSeedOrRandom) {
-      toast.error('Custom/Cloned voices not wired yet — coming next.');
-      return;
-    }
-  
     const controller = new AbortController();
     abortControllerRef.current = controller;
   
@@ -256,29 +245,70 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
     try {
       toast.loading('Starting synthesis...');
   
-      const fd = new FormData();
-      fd.append('text', text);
-      fd.append('output_format', fileFormat); // "wav" | "mp3"
-      fd.append('speed', String(speed));
-      fd.append('seeds', buildSeedsPayload());
+      // === BRANCH 1: Random / Seed ===
+      if (isSeedOrRandom(selectedVoice)) {
+        const fd = new FormData();
+        fd.append('text', text);
+        fd.append('output_format', fileFormat); // "wav" | "mp3"
+        fd.append('speed', String(speed));
+        fd.append('seeds', buildSeedsPayload());
   
-      // 🔸 hit the FastAPI route you showed: POST /tts/tts/
-      const res = await axios.post(`${VOICE_ENGINE_API_BASE_URL}/tts/tts/`, fd, {
-        withCredentials: true,
-        signal: controller.signal,
-      });
+        const res = await axios.post(
+          `${VOICE_ENGINE_API_BASE_URL}/tts/tts/`,
+          fd,
+          {
+            withCredentials: true,
+            signal: controller.signal,
+          }
+        );
   
-      const id = res.data.task_id;
-      setTaskId(id);
-      toast.success('Generation started.');
-      await pollAndFetchAudio(id);
+        const id = res.data.task_id;
+        setTaskId(id);
+        toast.success('Generation started.');
+        await pollAndFetchAudio(id);
+        return;
+      }
+  
+      // === BRANCH 2: Cloned voice ===
+      if (isClonedVoice(selectedVoice)) {
+        if (!selectedVoice.reference_audio_url || !selectedVoice.reference_transcript) {
+          throw new Error('Selected cloned voice is missing reference audio or transcript.');
+        }
+  
+        const fd = new FormData();
+        fd.append('audio_urls', selectedVoice.reference_audio_url); // multiple allowed; append more if/when you support it
+        fd.append('prompt_transcript', selectedVoice.reference_transcript);
+        fd.append('text', text);
+        fd.append('speed', String(speed));
+        fd.append('output_format', fileFormat);
+        fd.append('dialogue_mode', String(dialogueMode));
+        fd.append('language', language || 'en');
+  
+        const res = await axios.post(
+          `${VOICE_ENGINE_API_BASE_URL}/cloning/clone/`,
+          fd,
+          {
+            withCredentials: true,
+            signal: controller.signal,
+          }
+        );
+  
+        const id = res.data.task_id;
+        setTaskId(id);
+        toast.success('Generation started.');
+        await pollAndFetchAudio(id);
+        return;
+      }
+  
+      // If we get here, it's an unsupported branch for now
+      toast.error('Unsupported voice type.');
     } catch (err: any) {
       toast.dismiss();
       if (axios.isCancel(err)) {
         toast('Request cancelled.');
       } else {
         console.error(err);
-        toast.error(err?.response?.data?.detail || 'Failed to start generation.');
+        toast.error(err?.response?.data?.detail || err.message || 'Failed to start generation.');
       }
       setIsGenerating(false);
     }
