@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Upload, Play, Pause, RotateCcw, Download, Info, Trash2
+  Upload, Play, Pause, RotateCcw, Download, Trash2, Info, ChevronDown, 
 } from 'lucide-react';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { toast } from 'react-hot-toast';
+import axios from 'axios';
 
 import styles from './TextToSpeech.module.css';
 import avatar from '../../../assets/voice-avatar.png';
 
 import Settings from './Right/Settings/Settings';
 import VoiceLibrary from './Right/VoiceLibrary/VoiceLibrary';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 interface TextToSpeechProps {
   setActiveTab: (tab: 'cloning' | 'tts' | 'stt') => void;
@@ -29,6 +32,7 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
 
   const [text, setText] = useState('');
   const [showPlayback, setShowPlayback] = useState(false);
+  const [showTips, setShowTips] = useState(true);
 
   const [dialogueMode, setDialogueMode] = useState(false);
   const [speakers, setSpeakers] = useState<{ id: number; voiceName: string }[]>([]);
@@ -103,8 +107,25 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
     setShowPlayback(true);
   };
 
-  const handleStartEngine = () => {
-    toast.error('Failed to start Voice Engine. Service is not running.');
+  const handleStartEngine = async () => {
+    toast.loading('Starting Voice Engine...');
+    try {
+      const res = await axios.post(`${API_BASE_URL}/voice/start-runpod/`);
+      toast.dismiss();
+
+      const status = res.data.status;
+      if (["RUNNING", "STARTING", "REQUESTED"].includes(status)) {
+        toast.success('Voice Engine is starting.');
+      } else if (status === 'HEALTHY') {
+        toast.success('Voice Engine is already live. Refresh the page if needed.');
+      } else {
+        toast.error(`Engine status: ${status || 'Unknown'}`);
+      }
+    } catch (err: any) {
+      toast.dismiss();
+      console.error('API Error:', err);
+      toast.error('Failed to start Voice Engine.');
+    }
   };
 
   return (
@@ -164,6 +185,26 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
           maxLength={3000}
         />
         <div className={styles.charCount}>{text.length} / 3000 Characters</div>
+
+        <div className={styles.infoBox}>
+        <div className={styles.infoHeader} onClick={() => setShowTips(!showTips)}>
+          <Info size={20} />
+          <span>Tips for Better Output</span>
+          <ChevronDown size={18} className={showTips ? styles.rotated : ''} />
+        </div>
+        {showTips && (
+          <div className={styles.tipList}>
+            <p>Short input (under ~5s of audio) may sound unnatural.</p>
+            <p>Our batching algorithm automatically handles long text.</p>
+            <p>Generate non-verbal sounds with <code>(laughs)</code>, <code>(coughs)</code>, etc.</p>
+            <p>Verbal tags recognized at <a href="hyperlink" target="_blank" rel="noopener noreferrer">how it works</a>.</p>
+            <p>Use non-verbal tags sparingly; overusing or using unlisted ones may cause artifacts.</p>
+            <p>Generate dialogue using speaker tags like <code>[S1]</code> and <code>[S2]</code>.</p>
+            <p>Example: <code>[S1] Hello! [S2] Hi, how are you?</code></p>
+          </div>
+        )}
+      </div>
+
 
         <div className={styles.uploadNote}>
           <Info size={16} />

@@ -4,7 +4,7 @@ import { Upload, Info, CheckCircle, Trash, ChevronDown, Send, Loader2, Heart } f
 import { toast } from 'react-hot-toast';
 import styles from './VoiceCloning.module.css';
 import VoiceLibrary from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary';
-import type { VoiceLibraryRef } from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary'; // 👈 import type
+import type { VoiceLibraryRef } from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary';
 import avatar from '../../../assets/voice-avatar.png';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -26,7 +26,6 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const voiceLibraryRef = useRef<VoiceLibraryRef>(null);
-
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -56,36 +55,36 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
     if (!voiceName.trim()) return toast.error('Voice name is required.');
     if (audioFiles.length === 0) return toast.error('Upload an audio file.');
     if (!transcript.trim()) return toast.error('Transcript is required.');
-  
+
     setIsCloning(true);
     toast.success('Voice cloned successfully.');
     setSuccess(true);
     setIsCloning(false);
   };
-  
+
   const handleSave = async () => {
     if (!voiceName.trim()) return toast.error('Voice name is required.');
     if (!audioFiles[0]) return toast.error("Missing reference audio.");
     if (!transcript.trim()) return toast.error("Transcript is required.");
-  
+
     const formData = new FormData();
     formData.append('name', voiceName.trim());
     formData.append('reference_transcript', transcript.trim());
     formData.append('voice_type', 'cloned');
     formData.append('reference_audio', audioFiles[0]);
-  
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
-  
+
     try {
       setIsSaving(true);
       toast.loading('Saving voice...');
-  
+
       await axios.post(`${API_BASE_URL}/voice/save/`, formData, {
         signal: controller.signal,
         withCredentials: true,
       });
-  
+
       toast.dismiss();
       voiceLibraryRef.current?.refreshLibrary(voiceName.trim());
       toast.success('Voice saved.');
@@ -94,13 +93,17 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
       if (axios.isCancel(err)) {
         toast('Save cancelled.');
       } else {
-        toast.error('Failed to save voice.');
+        const message = err.response?.data?.error 
+          || Object.values(err.response?.data || {})[0]
+          || 'Failed to save voice.';
+        toast.error(message);
       }
-    } finally {
+    }
+     finally {
       setIsSaving(false);
       abortControllerRef.current = null;
     }
-  };  
+  };
 
   const handleCancelSave = () => {
     if (abortControllerRef.current) {
@@ -115,7 +118,6 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
       toast.dismiss();
 
       const status = res.data.status;
-
       if (["RUNNING", "STARTING", "REQUESTED"].includes(status)) {
         toast.success('Voice Engine is starting.');
       } else if (status === 'HEALTHY') {
@@ -182,20 +184,19 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
         </div>
 
         <div className={styles.right}>
-        <VoiceLibrary
-          ref={voiceLibraryRef}
-          goToVoiceCloning={() => {}}
-          hideCloneButton
-          hideDefaultVoices
-          setSelectedVoiceFromLibrary={(voice) => {
-            setSelectedVoiceForTTS({
-              id: voice.id,
-              name: voice.name,
-              avatar: voice.avatar_url || avatar,
-            });
-            setActiveTab('tts');
-          }}
-        />
+          <VoiceLibrary
+            ref={voiceLibraryRef}
+            goToVoiceCloning={() => {}}
+            hideCloneButton
+            setSelectedVoiceFromLibrary={(voice) => {
+              setSelectedVoiceForTTS({
+                id: voice.id,
+                name: voice.name,
+                avatar: voice.avatar_url || avatar,
+              });
+              setActiveTab('tts');
+            }}
+          />
         </div>
       </div>
     );
@@ -269,7 +270,10 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
             rows={5}
           />
           <p className={styles.subText}>
-            Transcript of uploaded audio is required. Use our <span className={styles.link} onClick={() => setActiveTab('stt')}>Speech-to-Text engine</span>.
+            Transcript of uploaded audio is required. Use our{' '}
+            <span className={styles.link} onClick={() => setActiveTab('stt')}>
+              Speech-to-Text engine
+            </span>.
           </p>
         </div>
 
@@ -282,7 +286,6 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
             >
               <Send size={16} /> Clone Voice
             </button>
-
           ) : (
             <button className={styles.primaryBtn} onClick={handleStartEngine}>
               Start Voice Engine
@@ -296,7 +299,6 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
           ref={voiceLibraryRef}
           goToVoiceCloning={() => {}}
           hideCloneButton
-          hideDefaultVoices
           setSelectedVoiceFromLibrary={(voice) => {
             setSelectedVoiceForTTS({
               id: voice.id,
@@ -304,7 +306,7 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
               avatar: voice.avatar_url || avatar,
             });
             setActiveTab('tts');
-          }}          
+          }}
         />
       </div>
     </div>

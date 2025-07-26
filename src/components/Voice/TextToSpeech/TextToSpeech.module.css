@@ -341,6 +341,82 @@
   transition: left 0.3s ease, width 0.3s ease;
 }
 
+.infoBox {
+  background: linear-gradient(145deg, #1d1d1d, #222);
+  border: 1px solid #444;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  color: #ddd;
+  font-size: 0.85rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 0 0 1px #292929, 0 0 8px rgba(0, 115, 255, 0.1);
+}
+
+.infoBox:hover {
+  box-shadow: 0 0 0 1px #444, 0 0 12px rgba(0, 115, 255, 0.2);
+}
+
+.infoHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #0073ff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tipList {
+  padding-top: 0.5rem;
+}
+
+.tipList p {
+  margin: 0.35rem 0;
+  padding-left: 1.4rem;
+  position: relative;
+  color: #bbb;
+  line-height: 1.4;
+}
+
+.tipList p::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+}
+
+.rotated {
+  transform: rotate(180deg);
+  transition: transform 0.3s ease;
+}
+
+.infoHeader svg {
+  transition: transform 0.3s ease;
+}
+
+.tipList a {
+  color: #4ea8ff;
+  text-decoration: underline;
+}
+
+.tipList code {
+  background: #2a2a2a;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  color: #eee;
+}
+
+.tipList a {
+  color: #0073ff;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.tipList a:hover {
+  color: #3399ff; /* Slightly lighter shade on hover */
+}
 
 /* 🌟 Mobile Responsive */
 @media (max-width: 768px) {

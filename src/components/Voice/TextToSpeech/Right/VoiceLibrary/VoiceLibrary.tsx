@@ -14,7 +14,6 @@ import toast from 'react-hot-toast';
 interface VoiceLibraryProps {
   goToVoiceCloning: () => void;
   hideCloneButton?: boolean;
-  hideDefaultVoices?: boolean;
   setSelectedVoiceFromLibrary?: (voice: Voice) => void;
 }
 
@@ -34,11 +33,9 @@ interface Voice {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
-  ({ goToVoiceCloning, hideCloneButton = false, hideDefaultVoices = false, setSelectedVoiceFromLibrary }, ref) =>  {
+  ({ goToVoiceCloning, hideCloneButton = false, setSelectedVoiceFromLibrary }, ref) => {
     const [search, setSearch] = useState('');
     const [clonedVoices, setClonedVoices] = useState<Voice[]>([]);
-    const [defaultVoices, setDefaultVoices] = useState<Voice[]>([]);
-    const [activeView, setActiveView] = useState<'cloned' | 'default' | 'both'>('both');
     const [itemHeight, setItemHeight] = useState(70);
     const [containerHeight, setContainerHeight] = useState(300);
     const [scrollTargetName, setScrollTargetName] = useState('');
@@ -51,23 +48,22 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [newName, setNewName] = useState('');
 
+    const [highlightedVoice, setHighlightedVoice] = useState<string | null>(null);
 
     const handleRenameVoice = async (voiceId: string, name: string) => {
       try {
         await axios.patch(`${API_BASE_URL}/voice/${voiceId}/`, { name }, { withCredentials: true });
-    
         setClonedVoices((prev) =>
           prev.map((v) => (v.id === voiceId ? { ...v, name } : v))
         );
-    
         setRenamingId(null);
         toast.success('Voice renamed');
       } catch (err) {
         console.error('Failed to rename voice', err);
         toast.error('Rename failed');
       }
-    };    
-    
+    };
+
     const handleDeleteVoice = async (voiceId: string) => {
       try {
         await axios.delete(`${API_BASE_URL}/voice/${voiceId}/`, { withCredentials: true });
@@ -77,8 +73,8 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
         console.error('Failed to delete voice', err);
         toast.error('Delete failed');
       }
-    };    
-    
+    };
+
     const confirmDelete = (voice: Voice) => {
       toast(
         (t) => (
@@ -103,29 +99,20 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
             </div>
           </div>
         ),
-        {
-          style: {
-            background: '#222',
-            border: '1px solid #444',
-          },
-        }
+        { style: { background: '#222', border: '1px solid #444' } }
       );
-    };  
+    };
 
     const fetchVoices = async () => {
       try {
         const res = await axios.get(`${API_BASE_URL}/voice/library/`, {
           withCredentials: true,
         });
-
-        setClonedVoices(res.data.cloned_voices);
-        setDefaultVoices(res.data.default_voices);
+        setClonedVoices(res.data.voices || []);
       } catch (err) {
         console.error('Failed to fetch voices', err);
       }
-    };
-
-    const [highlightedVoice, setHighlightedVoice] = useState<string | null>(null);
+    };    
 
     useImperativeHandle(ref, () => ({
       refreshLibrary: async (voiceName?: string) => {
@@ -147,22 +134,16 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
       const measure = () => {
         const height = voiceItemRef.current?.offsetHeight || 70;
         setItemHeight(height);
-        let reservedHeight = 250;
-        if (hideDefaultVoices) reservedHeight -= 100;
+        const reservedHeight = 250;
         const available = Math.max(100, window.innerHeight - reservedHeight);
         setContainerHeight(available);
       };
-
       measure();
       window.addEventListener('resize', measure);
       return () => window.removeEventListener('resize', measure);
-    }, [hideDefaultVoices]);
+    }, []);
 
     const filteredCloned = clonedVoices
-      .filter((v) => v.name.toLowerCase().includes(search.toLowerCase()))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    const filteredDefault = defaultVoices
       .filter((v) => v.name.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -175,9 +156,7 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
           audioRef.current?.pause();
           setPlayingId(null);
         } else {
-          if (audioRef.current) {
-            audioRef.current.pause();
-          }
+          audioRef.current?.pause();
           audioRef.current = new Audio(voice.preview_audio_url);
           audioRef.current.play();
           setPlayingId(voice.id);
@@ -186,18 +165,8 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
       }
     };
 
-    const renderVoiceItem = (
-      voice: Voice,
-      isDefault = false,
-      isFirst = false
-    ) => {
-      const ref =
-        voice.name === scrollTargetName
-          ? scrollToVoiceRef
-          : isFirst
-          ? voiceItemRef
-          : undefined;
-
+    const renderVoiceItem = (voice: Voice, isFirst = false) => {
+      const ref = voice.name === scrollTargetName ? scrollToVoiceRef : isFirst ? voiceItemRef : undefined;
       const isHighlighted = voice.name === highlightedVoice;
 
       return (
@@ -207,54 +176,47 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
           className={`${styles.voiceItem} ${isHighlighted ? styles.highlighted : ''}`}
         >
           <div className={styles.avatarBox}>
-            {isDefault ? (
-              <div className={styles.defaultAvatar}></div>
-            ) : (
-              <img src={voice.avatar_url || avatar} alt="avatar" />
-            )}
+            <img src={voice.avatar_url || avatar} alt="avatar" />
           </div>
           <div className={styles.voiceInfo}>
-          <div className={styles.voiceName}>
-            {renamingId === voice.id ? (
-              <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleRenameVoice(voice.id, newName);
-              }}
-              className={styles.renameForm}
-            >
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                autoFocus
-                className={styles.renameInput}
-              />
-              <div className={styles.renameButtons}>
-                <div className={styles.tooltipWrapper} data-tooltip="send">
-                  <button type="submit" className={styles.renameIconBtn}>
-                    <Send size={16} />
-                  </button>
-                </div>
-                <div className={styles.tooltipWrapper} data-tooltip="close">
-                  <button
-                    type="button"
-                    onClick={() => setRenamingId(null)}
-                    className={styles.renameIconBtn}
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
-            </form>
-              
-            ) : (
-              voice.name
-            )}
-          </div>
+            <div className={styles.voiceName}>
+              {renamingId === voice.id ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleRenameVoice(voice.id, newName);
+                  }}
+                  className={styles.renameForm}
+                >
+                  <input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    autoFocus
+                    className={styles.renameInput}
+                  />
+                  <div className={styles.renameButtons}>
+                    <div className={styles.tooltipWrapper} data-tooltip="send">
+                      <button type="submit" className={styles.renameIconBtn}>
+                        <Send size={16} />
+                      </button>
+                    </div>
+                    <div className={styles.tooltipWrapper} data-tooltip="close">
+                      <button
+                        type="button"
+                        onClick={() => setRenamingId(null)}
+                        className={styles.renameIconBtn}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              ) : (
+                voice.name
+              )}
+            </div>
             <div className={styles.voiceMeta}>
-              {isDefault
-                ? voice.description
-                : `Created ${voice.created_at?.split('T')[0]}`}
+              {`Created ${voice.created_at?.split('T')[0]}`}
             </div>
           </div>
           <div className={styles.voiceActions}>
@@ -268,8 +230,8 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
               </button>
             ) : (
               <div className={styles.tooltipWrapper} data-tooltip="No preview available">
-              <button disabled><Play size={16} /></button>
-              </div>            
+                <button disabled><Play size={16} /></button>
+              </div>
             )}
             <div className={styles.dropdownWrapper}>
               <button
@@ -279,43 +241,35 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
               >
                 <MoreVertical size={16} />
               </button>
-
               {actionMenuId === voice.id && (
                 <div className={styles.dropdownMenu}>
-                  {!isDefault && (
-                    <>
-                    {setSelectedVoiceFromLibrary && (
-                      <button
-                        onClick={() => {
-                          setSelectedVoiceFromLibrary(voice);
-                          setActionMenuId(null);
-                        }}
-                      >
-                        Use Voice
-                      </button>
-                    )}
-                      <button onClick={() => {
-                        setRenamingId(voice.id);
-                        setNewName(voice.name);
+                  {setSelectedVoiceFromLibrary && (
+                    <button
+                      onClick={() => {
+                        setSelectedVoiceFromLibrary(voice);
                         setActionMenuId(null);
-                      }}>
-                        Rename
-                      </button>
-                      <button
-                        onClick={() => {
-                          confirmDelete(voice);
-                          setActionMenuId(null);
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </>
+                      }}
+                    >
+                      Use Voice
+                    </button>
                   )}
-                  {isDefault && (
-                    <div style={{ padding: '8px 12px', color: '#aaa', fontSize: '0.8rem' }}>
-                      Shared voice (readonly)
-                    </div>
-                  )}
+                  <button
+                    onClick={() => {
+                      setRenamingId(voice.id);
+                      setNewName(voice.name);
+                      setActionMenuId(null);
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    onClick={() => {
+                      confirmDelete(voice);
+                      setActionMenuId(null);
+                    }}
+                  >
+                    Delete
+                  </button>
                 </div>
               )}
             </div>
@@ -346,80 +300,16 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <span>Cloned Voices</span>
-            <button
-              className={styles.viewAll}
-              onClick={() =>
-                setActiveView(
-                  activeView === 'cloned'
-                    ? 'both' // collapse it
-                    : 'cloned' // expand cloned, collapse default
-                )
-              }              
-            >
-              {activeView === 'cloned' ? 'Collapse' : 'View all'}
-            </button>
           </div>
           <div
-            className={`${styles.voiceList} ${
-              hideDefaultVoices ? styles.allVisible : ''
-            } ${
-              hideDefaultVoices
-                ? filteredCloned.length <= 3
-                  ? styles.threeVisible
-                  : styles.sixVisible
-                : ''
-            }`}
+            className={styles.voiceList}
             style={{
-              maxHeight:
-                hideDefaultVoices
-                  ? activeView === 'cloned'
-                    ? 12 * 55 // fully expanded
-                    : 6 * 55 // collapsed
-                  : activeView === 'cloned'
-                  ? containerHeight
-                  : itemHeight * itemsVisibleCollapsed
-
+              maxHeight: containerHeight || itemHeight * itemsVisibleCollapsed,
             }}
           >
-            {filteredCloned.map((voice, i) =>
-              renderVoiceItem(voice, false, i === 0)
-            )}
+            {filteredCloned.map((voice, i) => renderVoiceItem(voice, i === 0))}
           </div>
         </div>
-
-        {!hideDefaultVoices && (
-          <div className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <span>Default Voices</span>
-              <button
-                className={styles.viewAll}
-                onClick={() =>
-                  setActiveView(
-                    activeView === 'default'
-                      ? 'both' // collapse it
-                      : 'default' // expand default, collapse cloned
-                  )
-                }                
-              >
-                {activeView === 'default' ? 'Collapse' : 'View all'}
-              </button>
-            </div>
-            <div
-              className={styles.voiceList}
-              style={{
-                maxHeight:
-                  activeView === 'default'
-                    ? containerHeight // fully expanded
-                    : itemHeight * itemsVisibleCollapsed // collapsed
-
-              }}
-            >
-              {filteredDefault.map((voice, i) =>
-                renderVoiceItem(voice, true, i === 0)
-              )}
-            </div>
-          </div>
-        )}
       </div>
     );
   }
