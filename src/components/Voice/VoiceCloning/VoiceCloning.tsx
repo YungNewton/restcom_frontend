@@ -12,7 +12,14 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 interface Props {
   setActiveTab: (tab: 'cloning' | 'tts' | 'stt') => void;
   engineOnline: boolean;
-  setSelectedVoiceForTTS: (voice: { id: string; name: string; avatar: string }) => void;
+  setSelectedVoiceForTTS: (voice: {
+    id: string;
+    name: string;
+    avatar: string;
+    reference_audio_url?: string | null;
+    reference_transcript?: string | null;
+    voice_type?: 'cloned' | 'seed';
+  }) => void;
 }
 
 const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Props) => {
@@ -156,13 +163,18 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
                 className={styles.primaryBtn}
                 onClick={async () => {
                   if (!isSaving) {
-                    await handleSave();
+                    await handleSave(); // Save voice first
                   }
+
                   setSelectedVoiceForTTS({
                     id: 'cloned',
                     name: voiceName,
                     avatar,
+                    reference_audio_url: audioFiles[0] ? URL.createObjectURL(audioFiles[0]) : '', 
+                    reference_transcript: transcript.trim(),
+                    voice_type: 'cloned',
                   });
+
                   setActiveTab('tts');
                 }}
               >
@@ -193,9 +205,12 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
                 id: voice.id,
                 name: voice.name,
                 avatar: voice.avatar_url || avatar,
+                reference_audio_url: voice.reference_audio_url,
+                reference_transcript: voice.reference_transcript,
+                voice_type: voice.voice_type || 'cloned',
               });
               setActiveTab('tts');
-            }}
+            }}            
           />
         </div>
       </div>

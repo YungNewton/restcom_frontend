@@ -92,7 +92,6 @@ const Voice = () => {
         <TextToSpeech 
           setActiveTab={setActiveTab} 
           engineOnline={engineOnline} 
-          setEngineOnline={setEngineOnline}
           externalSelectedVoice={selectedVoiceForTTS}
           clearExternalVoice={() => setSelectedVoiceForTTS(null)}
         />

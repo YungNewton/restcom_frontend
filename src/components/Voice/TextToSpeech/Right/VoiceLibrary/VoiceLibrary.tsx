@@ -28,6 +28,9 @@ interface Voice {
   created_at?: string;
   avatar_url?: string;
   preview_audio_url?: string;
+  reference_audio_url?: string | null;  // ADD
+  reference_transcript?: string | null; // ADD
+  voice_type?: 'cloned' | 'seed';       // ADD
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
