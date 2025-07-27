@@ -6,6 +6,20 @@ import avatar from '../../../../../assets/voice-avatar.png';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 
+type ClonedVoice = {
+  id: string;
+  name: string;
+  avatar: string;
+  reference_audio_url: string;
+  reference_transcript: string;
+  voice_type: 'cloned' | 'seed';
+};
+
+type Speaker = {
+  id: number;
+  voice: ClonedVoice;
+};
+
 interface SettingsProps {
   speed: number;
   setSpeed: (value: number) => void;
@@ -21,7 +35,7 @@ interface SettingsProps {
   setSelectedVoice: (voice: { id: string; name: string; avatar: string }) => void;
   dialogueMode: boolean;
   setDialogueMode: (value: boolean) => void;
-  setSpeakers: (speakers: { id: number; voiceName: string }[]) => void;
+  setSpeakers: (speakers: Speaker[]) => void;
   goToVoiceLibrary: () => void;
   seed: string;
   setSeed: (value: string) => void;

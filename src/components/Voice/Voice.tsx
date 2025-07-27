@@ -10,7 +10,7 @@ const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const Voice = () => {
   const [activeTab, setActiveTab] = useState<'cloning' | 'tts' | 'stt'>('tts');
-  const [engineOnline, setEngineOnline] = useState(true);
+  const [engineOnline, setEngineOnline] = useState(false);
   const [selectedVoiceForTTS, setSelectedVoiceForTTS] = useState<any | null>(null);
 
   useEffect(() => {

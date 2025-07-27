@@ -34,7 +34,7 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
   const [showTips, setShowTips] = useState(true);
 
   const [dialogueMode, setDialogueMode] = useState(false);
-  const [speakers, setSpeakers] = useState<{ id: number; voiceName: string }[]>([]);
+  const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const speakerListRef = useRef<HTMLDivElement>(null);
 
   const [speed, setSpeed] = useState(1);
@@ -51,6 +51,8 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
     voiceLibrary: useRef<HTMLButtonElement>(null),
   };
 
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+
   const [indicatorLeft, setIndicatorLeft] = useState('0px');
   const [indicatorWidth, setIndicatorWidth] = useState('0px');
 
@@ -66,6 +68,20 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
     name: 'Random',
     avatar,
   });
+
+  type ClonedVoice = {
+    id: string;
+    name: string;
+    avatar: string;
+    reference_audio_url: string;
+    reference_transcript: string;
+    voice_type: 'cloned' | 'seed';
+  };
+  
+  type Speaker = {
+    id: number;
+    voice: ClonedVoice; // each speaker can use a different cloned voice
+  };
   
   /** -------- Polling / cancel groundwork -------- */
   const [isGenerating, setIsGenerating] = useState(false);
@@ -80,6 +96,8 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [audioKey, setAudioKey] = useState(0);
+
 
   
   useEffect(() => {
@@ -138,34 +156,73 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
       if (abortControllerRef.current) abortControllerRef.current.abort();
       if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
-  }, [audioUrl]);  
+  }, [audioUrl]);
+  
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const totalFiles = [...uploadedFiles, ...files];
+    if (totalFiles.length > 5) return toast.error('Max 5 files allowed.');
+    setUploadedFiles(totalFiles);
+  };
 
-  const togglePlayPause = () => {
+  const removeFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+  };  
+
+  const togglePlayPause = async () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (isPlaying) {
-      audio.pause();
+  
+    if (audio.paused) {
+      await audio.play();
+      setIsPlaying(true);
     } else {
-      audio.play();
+      audio.pause();
+      setIsPlaying(false);
     }
-    setIsPlaying(!isPlaying);
   };
   
   const skipForward = (seconds = 5) => {
     const audio = audioRef.current;
-    if (audio) audio.currentTime = Math.min(audio.currentTime + seconds, duration);
+    if (!audio) return;
+  
+    const dur = Number.isFinite(audio.duration) ? audio.duration : duration || 0;
+    audio.currentTime = Math.min(audio.currentTime + seconds, dur);
   };
   
   const skipBackward = (seconds = 5) => {
     const audio = audioRef.current;
-    if (audio) audio.currentTime = Math.max(audio.currentTime - seconds, 0);
+    if (!audio) return;
+  
+    audio.currentTime = Math.max(audio.currentTime - seconds, 0);
   };
   
   const handleSliderChange = (value: number | number[]) => {
-    const newValue = Array.isArray(value) ? value[0] : value; 
+    const v = Array.isArray(value) ? value[0] : value;
     const audio = audioRef.current;
-    if (audio) audio.currentTime = newValue;
-    setCurrentTime(newValue);
+    if (!audio) return;
+  
+    audio.currentTime = v;
+    setCurrentTime(v);
+  };
+  
+  const onLoadedMetadata = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+  
+    const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+    setDuration(dur);
+  };
+  
+  const onTimeUpdate = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+  
+    setCurrentTime(audio.currentTime);
+  };
+  
+  const onEnded = () => {
+    setIsPlaying(false);
   };  
   
   const handleDownload = () => {
@@ -196,6 +253,32 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
 
   const isClonedVoice = (v: typeof selectedVoice) =>
     v.voice_type === 'cloned' || !!v.reference_audio_url;
+
+  function appendAudioData(fd: FormData, urls: string[], transcripts: string[]) {
+    urls.forEach((url) => fd.append('audio_urls', url));
+    transcripts.forEach((t) => fd.append('prompt_transcripts', t));  // FIXED key
+  }     
+
+  function getDialogueAudioUrls(): string[] {
+    // Use speakers if available, else fallback to selectedVoice
+    if (speakers.length > 0) {
+      return speakers
+        .map((s) => s.voice.reference_audio_url)
+        .filter((url): url is string => !!url);
+    }
+    if (selectedVoice.reference_audio_url) {
+      return [selectedVoice.reference_audio_url];
+    }
+    return [];
+  }
+  
+  function getDialoguePromptTranscripts(): string[] {
+    if (speakers.length > 0) {
+      return speakers.map((s) => s.voice.reference_transcript || '');
+    }
+    return selectedVoice.reference_transcript ? [selectedVoice.reference_transcript] : [];
+  }
+  
 
   const handleCancelGenerate = async () => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -231,10 +314,10 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
       toast.error('Voice Engine is Offline');
       return;
     }
-    if (!text.trim()) {
-      toast.error('Please enter some text.');
+    if (!text.trim() && uploadedFiles.length === 0) {
+      toast.error('Please enter text or upload a file.');
       return;
-    }
+    }    
   
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -248,7 +331,11 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
       // === BRANCH 1: Random / Seed ===
       if (isSeedOrRandom(selectedVoice)) {
         const fd = new FormData();
-        fd.append('text', text);
+        if (uploadedFiles.length > 0) {
+          uploadedFiles.forEach((file) => fd.append('files', file));
+        } else {
+          fd.append('text', text);
+        }
         fd.append('output_format', fileFormat); // "wav" | "mp3"
         fd.append('speed', String(speed));
         fd.append('seeds', buildSeedsPayload());
@@ -276,12 +363,25 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
         }
   
         const fd = new FormData();
-        fd.append('audio_urls', selectedVoice.reference_audio_url); // multiple allowed; append more if/when you support it
-        fd.append('prompt_transcript', selectedVoice.reference_transcript);
-        fd.append('text', text);
+        const urls = getDialogueAudioUrls();
+        const transcripts = getDialoguePromptTranscripts();
+
+        if (urls.length === 0 || transcripts.length === 0) {
+          toast.error('Missing audio URLs or transcripts for cloning.');
+          setIsGenerating(false);
+          return;
+        }
+
+        appendAudioData(fd, urls, transcripts);
+
+        if (uploadedFiles.length > 0) {
+          uploadedFiles.forEach((file) => fd.append('files', file));
+        } else {
+          fd.append('text', text);
+        }
         fd.append('speed', String(speed));
         fd.append('output_format', fileFormat);
-        fd.append('dialogue_mode', String(dialogueMode));
+        fd.append('dialogue_mode', dialogueMode ? '1' : '0');
         fd.append('language', language || 'en');
   
         const res = await axios.post(
@@ -314,7 +414,7 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
     }
   };  
 
-  const pollAndFetchAudio = async (id: string, intervalMs = 1500, timeoutMs = 120000) => {
+  const pollAndFetchAudio = async (id: string, intervalMs = 1500, timeoutMs = 3000000) => {
     const start = Date.now();
   
     while (true) {
@@ -326,7 +426,7 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
       }
   
       try {
-        const res = await fetch(`${VOICE_ENGINE_API_BASE_URL}/task-status/${id}`, {
+        const res = await fetch(`${VOICE_ENGINE_API_BASE_URL}/cloning/task-status/${id}`, {
           method: 'GET',
           credentials: 'include',
           signal: abortControllerRef.current?.signal,
@@ -344,10 +444,15 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
   
           setAudioBlob(blob);
           setAudioUrl(url);
+          setAudioKey((k) => k + 1);  // force <audio> remount
+          setCurrentTime(0);
+          setDuration(0);
+          setIsPlaying(false);
           setShowPlayback(true);
           setIsGenerating(false);
           toast.dismiss();
           toast.success('Speech ready!');
+
   
           return;
         }
@@ -412,7 +517,23 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
               className={styles.addSpeakerBtn}
               onClick={() => {
                 const nextId = speakers.length + 1;
-                setSpeakers([...speakers, { id: nextId, voiceName: selectedVoice.name }]);
+
+                // fallback to selectedVoice if it's a cloned voice
+                if (!selectedVoice.reference_audio_url || !selectedVoice.reference_transcript) {
+                  toast.error('Pick a cloned voice first to add a speaker.');
+                  return;
+                }
+
+                const voice: ClonedVoice = {
+                  id: selectedVoice.id,
+                  name: selectedVoice.name,
+                  avatar: selectedVoice.avatar,
+                  reference_audio_url: selectedVoice.reference_audio_url,
+                  reference_transcript: selectedVoice.reference_transcript,
+                  voice_type: selectedVoice.voice_type || 'cloned',
+                };
+
+                setSpeakers(prev => [...prev, { id: nextId, voice }]);
               }}
             >
               + Add Speaker
@@ -423,7 +544,7 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
                 <div key={speaker.id} className={styles.speakerCard}>
                   <img src={avatar} alt="speaker avatar" className={styles.avatar} />
                   <div className={styles.speakerDetails}>
-                    <span className={styles.voiceName}>{speaker.voiceName}</span>
+                    <span className={styles.voiceName}>{speaker.voice.name}</span>
                     <span className={styles.speakerLabel}>Speaker {index + 1}</span>
                   </div>
                   <button
@@ -482,16 +603,12 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
 
         <div className={styles.uploadBox}>
           <label>
-            <input
+          <input
               type="file"
               accept=".txt,.pdf,.doc,.docx,.md,.rtf"
+              multiple
               style={{ display: 'none' }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  console.log('File selected:', file.name);
-                }
-              }}
+              onChange={handleFileUpload}
             />
             <div className={styles.uploadInner}>
               <Upload size={22} />
@@ -500,6 +617,21 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
             </div>
           </label>
         </div>
+
+        {uploadedFiles.length > 0 && (
+        <ul className={styles.fileList}>
+          {uploadedFiles.map((file, i) => (
+            <li key={i}>
+              {file.name}
+              <Trash2
+                size={14}
+                onClick={() => removeFile(i)}
+                className={styles.trash}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
 
         <div className={styles.actionRow}>
           {engineOnline ? (
@@ -510,7 +642,8 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
             >
               {isGenerating ? (
                 <>
-                  <span className={styles.spinner}></span> Cancel
+                  <span className={styles.spinner}></span>
+                  Cancel
                 </>
               ) : (
                 'Generate Speech'
@@ -525,13 +658,21 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
 
         {showPlayback && audioUrl && (
           <div className={styles.playbackContainer}>
-            <audio ref={audioRef} src={audioUrl} preload="metadata" />
+            <audio
+              key={audioKey}
+              ref={audioRef}
+              src={audioUrl}
+              preload="metadata"
+              onLoadedMetadata={onLoadedMetadata}
+              onTimeUpdate={onTimeUpdate}
+              onEnded={onEnded}
+            />
 
             <div className={styles.audioControls}>
               <div className={styles.tooltipWrapper} data-tooltip="Back 5s">
                 <button onClick={() => skipBackward(5)}>«</button>
               </div>
-              <div className={styles.tooltipWrapper} data-tooltip={isPlaying ? "Pause" : "Play"}>
+              <div className={styles.tooltipWrapper} data-tooltip={isPlaying ? 'Pause' : 'Play'}>
                 <button onClick={togglePlayPause}>
                   {isPlaying ? <Pause size={20} /> : <Play size={20} />}
                 </button>
@@ -549,12 +690,14 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
                 <img src={selectedVoice.avatar} alt="avatar" />
                 <span>Output: {selectedVoice.name}</span>
               </div>
+
               <span>{formatTime(currentTime)}</span>
               <Slider
                 min={0}
                 max={duration || 0}
-                value={currentTime}
+                value={Math.min(currentTime, duration || 0)}
                 onChange={handleSliderChange}
+                disabled={!duration}
                 railStyle={{ backgroundColor: '#444', height: 4 }}
                 trackStyle={{ backgroundColor: '#0073ff', height: 4 }}
                 handleStyle={{
@@ -565,7 +708,7 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
                   backgroundColor: '#fff',
                 }}
               />
-              <span>{formatTime(duration)}</span>
+              <span>{formatTime(Math.max(duration - currentTime, 0))}</span>
             </div>
           </div>
         )}

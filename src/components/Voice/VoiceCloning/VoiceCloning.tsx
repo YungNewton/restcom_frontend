@@ -73,28 +73,30 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
     if (!voiceName.trim()) return toast.error('Voice name is required.');
     if (!audioFiles[0]) return toast.error("Missing reference audio.");
     if (!transcript.trim()) return toast.error("Transcript is required.");
-
+  
     const formData = new FormData();
     formData.append('name', voiceName.trim());
     formData.append('reference_transcript', transcript.trim());
     formData.append('voice_type', 'cloned');
     formData.append('reference_audio', audioFiles[0]);
-
+  
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
+  
     try {
       setIsSaving(true);
       toast.loading('Saving voice...');
-
-      await axios.post(`${API_BASE_URL}/voice/save/`, formData, {
+  
+      const response = await axios.post(`${API_BASE_URL}/voice/save/`, formData, {
         signal: controller.signal,
         withCredentials: true,
       });
-
+  
       toast.dismiss();
       voiceLibraryRef.current?.refreshLibrary(voiceName.trim());
       toast.success('Voice saved.');
+  
+      return response.data;  // Use entire response data
     } catch (err: any) {
       toast.dismiss();
       if (axios.isCancel(err)) {
@@ -105,13 +107,13 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
           || 'Failed to save voice.';
         toast.error(message);
       }
-    }
-     finally {
+      return null;
+    } finally {
       setIsSaving(false);
       abortControllerRef.current = null;
     }
-  };
-
+  };  
+  
   const handleCancelSave = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -162,17 +164,21 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
               <button
                 className={styles.primaryBtn}
                 onClick={async () => {
-                  if (!isSaving) {
-                    await handleSave(); // Save voice first
+                  if (isSaving) return; // Prevent double-clicks during save
+
+                  const savedVoice = await handleSave(); // handleSave now returns response.data
+                  if (!savedVoice || !savedVoice.id) {
+                    toast.error('Voice could not be saved. Fix errors and try again.');
+                    return;
                   }
 
                   setSelectedVoiceForTTS({
-                    id: 'cloned',
-                    name: voiceName,
-                    avatar,
-                    reference_audio_url: audioFiles[0] ? URL.createObjectURL(audioFiles[0]) : '', 
-                    reference_transcript: transcript.trim(),
-                    voice_type: 'cloned',
+                    id: savedVoice.id,
+                    name: savedVoice.name,
+                    avatar: savedVoice.avatar_url || avatar,
+                    reference_audio_url: savedVoice.reference_audio_url || null,
+                    reference_transcript: savedVoice.reference_transcript || null,
+                    voice_type: savedVoice.voice_type || 'cloned',
                   });
 
                   setActiveTab('tts');
