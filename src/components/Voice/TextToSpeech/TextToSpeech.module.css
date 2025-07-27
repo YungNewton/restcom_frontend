@@ -665,3 +665,44 @@
   color: #99ddff;
   background-color:transparent;
 }
+
+.sampleTextBar {
+  display: flex;
+  overflow-x: auto;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sampleTextBar::-webkit-scrollbar {
+  display: none;
+}
+
+.sampleTextBtn {
+  margin: 0.15rem 0;
+  flex: 0 0 auto;
+  background-color: #2a2a2a;
+  color: white;
+  border: 1px solid #333;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  box-shadow: 0 0 6px rgba(0, 115, 255, 0.05);
+
+  /* 🔥 Fixed size & truncation */
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sampleTextBtn:hover {
+  background-color: #2e2e2e;
+  border-color: #444;
+  transform: translateY(-2px);
+  box-shadow: 0 0 8px rgba(0, 115, 255, 0.12);
+}

@@ -98,6 +98,18 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
   const [duration, setDuration] = useState(0);
   const [audioKey, setAudioKey] = useState(0);
 
+  const sampleTexts = [
+    "[S1] Morning, Alex! (laughs)\n[S2] You're in a good mood today.\n[S1] Coffee does that to me.\n[S2] Then let’s grab one before the meeting, shall we?",
+    "Welcome to our daily briefing. (clears throat) Today, we’ll talk about three major updates, starting with our product launch timeline and marketing goals.",
+    "The weekend’s here! (sighs) Finally, a chance to unwind, read that book you’ve been ignoring, and maybe even take a nap or two. You deserve it.",
+    "[S1] Did you hear that sound? (gasps)\n[S2] Relax, it’s just the wind.\n[S1] Well, it sounded like footsteps.\n[S2] (laughs) Too many late-night movies.",
+    "[S1] Oh, come on, don’t look at me like that.\n[S2] (chuckle) I’m not saying a word.\n[S1] You’re impossible!\n[S2] And yet, you still like me.",
+    "Reading a good book is like traveling to another world. Each page unfolds new adventures, perspectives, and emotions, all from the comfort of your favorite chair.",
+    "Every great achievement starts with a single step forward. With determination, persistence, and belief in your vision, even the most difficult goals become possible.",
+    "The sun dipped below the horizon, painting the sky in hues of orange and purple. A gentle breeze carried the scent of pine and fresh grass, while the first stars began to twinkle above.",
+    "Technology continues to shape our lives in remarkable ways. From voice assistants to artificial intelligence, the pace of innovation is accelerating faster than ever before.",
+    "Imagine a peaceful morning walk through a quiet park. The soft rustle of leaves, distant birdsong, and warm sunlight create the perfect moment of calm and reflection."
+  ];
 
   
   useEffect(() => {
@@ -573,6 +585,19 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
           maxLength={3000}
         />
         <div className={styles.charCount}>{text.length} / 3000 Characters</div>
+
+        {/* Sample Text Suggestions */}
+        <div className={styles.sampleTextBar}>
+          {sampleTexts.map((item, idx) => (
+            <button
+              key={idx}
+              className={styles.sampleTextBtn}
+              onClick={() => setText(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
 
         {/* Tips Section */}
         <div className={styles.infoBox}>
