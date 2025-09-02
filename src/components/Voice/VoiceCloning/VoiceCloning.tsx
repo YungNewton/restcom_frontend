@@ -6,6 +6,8 @@ import styles from './VoiceCloning.module.css';
 import VoiceLibrary from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary';
 import type { VoiceLibraryRef } from '../TextToSpeech/Right/VoiceLibrary/VoiceLibrary';
 import avatar from '../../../assets/voice-avatar.png';
+import { api, getAxiosErrorMessage } from '../../../lib/api';
+
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -30,6 +32,14 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
   const [transcript, setTranscript] = useState('');
   const [isCloning, setIsCloning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [savedVoice, setSavedVoice] = useState<null | {
+    id: string;
+    name: string;
+    avatar_url?: string;
+    reference_audio_url?: string | null;
+    reference_transcript?: string | null;
+    voice_type?: 'cloned' | 'seed';
+  }>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const voiceLibraryRef = useRef<VoiceLibraryRef>(null);
@@ -37,20 +47,32 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const totalFiles = [...audioFiles, ...files];
-
+  
     if (totalFiles.length > 1) {
       toast.error('Only 1 file is allowed.');
       return;
     }
-
+  
     const oversized = totalFiles.find(file => file.size > 50 * 1024 * 1024);
     if (oversized) {
       toast.error(`"${oversized.name}" exceeds 50MB limit.`);
       return;
     }
-
-    setAudioFiles(totalFiles);
-  };
+  
+    const file = totalFiles[0];
+    const url = URL.createObjectURL(file);
+  
+    const media = document.createElement(file.type.startsWith('video') ? 'video' : 'audio');
+    media.src = url;
+    media.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      if (media.duration > 22) {
+        toast.error(`media should not exceed 20 seconds.`);
+      } else {
+        setAudioFiles([file]);
+      }
+    };
+  };  
 
   const removeFile = (index: number) => {
     const updated = [...audioFiles];
@@ -71,8 +93,8 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
 
   const handleSave = async () => {
     if (!voiceName.trim()) return toast.error('Voice name is required.');
-    if (!audioFiles[0]) return toast.error("Missing reference audio.");
-    if (!transcript.trim()) return toast.error("Transcript is required.");
+    if (!audioFiles[0]) return toast.error('Missing reference audio.');
+    if (!transcript.trim()) return toast.error('Transcript is required.');
   
     const formData = new FormData();
     formData.append('name', voiceName.trim());
@@ -85,34 +107,38 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
   
     try {
       setIsSaving(true);
-      toast.loading('Saving voice...');
+      const tId = toast.loading('Saving voice...');
   
-      const response = await axios.post(`${API_BASE_URL}/voice/save/`, formData, {
+      const response = await api.post('/voice/save/', formData, {
         signal: controller.signal,
-        withCredentials: true,
+        headers: {},
       });
   
-      toast.dismiss();
+      toast.dismiss(tId);
       voiceLibraryRef.current?.refreshLibrary(voiceName.trim());
       toast.success('Voice saved.');
-  
-      return response.data;  // Use entire response data
+      setSavedVoice(response.data);
+      return response.data;
     } catch (err: any) {
       toast.dismiss();
-      if (axios.isCancel(err)) {
+  
+      if (err?.code === 'ERR_CANCELED') {
         toast('Save cancelled.');
+      } else if (
+        err?.response?.status === 400 &&
+        err?.response?.data?.error === 'You already have a voice with this name.'
+      ) {
+        toast.error('You already have a voice with this name.');
       } else {
-        const message = err.response?.data?.error 
-          || Object.values(err.response?.data || {})[0]
-          || 'Failed to save voice.';
-        toast.error(message);
+        toast.error(getAxiosErrorMessage(err) || 'Failed to save voice.');
       }
+  
       return null;
     } finally {
       setIsSaving(false);
       abortControllerRef.current = null;
     }
-  };  
+  };
   
   const handleCancelSave = () => {
     if (abortControllerRef.current) {
@@ -164,24 +190,24 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
               <button
                 className={styles.primaryBtn}
                 onClick={async () => {
-                  if (isSaving) return; // Prevent double-clicks during save
-
-                  const savedVoice = await handleSave(); // handleSave now returns response.data
-                  if (!savedVoice || !savedVoice.id) {
-                    toast.error('Voice could not be saved. Fix errors and try again.');
-                    return;
+                  if (isSaving) return
+                
+                  // If already saved, skip saving
+                  const data = savedVoice ?? (await handleSave())
+                  if (!data || !data.id) {
+                    toast.error('Voice could not be saved. Fix errors and try again.')
+                    return
                   }
-
+                
                   setSelectedVoiceForTTS({
-                    id: savedVoice.id,
-                    name: savedVoice.name,
-                    avatar: savedVoice.avatar_url || avatar,
-                    reference_audio_url: savedVoice.reference_audio_url || null,
-                    reference_transcript: savedVoice.reference_transcript || null,
-                    voice_type: savedVoice.voice_type || 'cloned',
-                  });
-
-                  setActiveTab('tts');
+                    id: data.id,
+                    name: data.name,
+                    avatar: data.avatar_url || avatar,
+                    reference_audio_url: data.reference_audio_url ?? null,
+                    reference_transcript: data.reference_transcript ?? null,
+                    voice_type: data.voice_type || 'cloned',
+                  })
+                  setActiveTab('tts')
                 }}
               >
                 Use Voice
@@ -274,6 +300,7 @@ const VoiceCloning = ({ setActiveTab, engineOnline, setSelectedVoiceForTTS }: Pr
             <div className={styles.tipList}>
               <p>Use clear, high-quality audio recordings.</p>
               <p>Record at least 5–10 seconds of clean speech.</p>
+              <p>Audio must not exceed 20 seconds in length.</p>
               <p>Avoid background noise or overlapping voices.</p>
               <p>Speak naturally and clearly at a steady pace.</p>
               <p>Focus on clarity — quality matters more than quantity.</p>

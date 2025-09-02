@@ -1,0 +1,208 @@
+/* Base */
+.wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    box-sizing: border-box;
+    overflow: auto;
+  }
+  
+  .panel {
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 1.5rem;
+    color: white;
+  }
+  
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  
+  .sectionHeader {
+    color: white;
+    font-weight: 500;
+    font-size: 0.95rem;
+    margin-bottom: 0.3rem;
+  }
+  
+  .input {
+    background: #222;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    width: 100%;
+    font-size: 1rem;
+  }
+  
+  .textarea {
+    resize: vertical;
+    min-height: 100px;
+    font-family: inherit;
+    line-height: 1.5;
+  }
+  
+  .uploadBox {
+    border: 1px dashed #444;
+    border-radius: 10px;
+    padding: 1.2rem;
+    text-align: center;
+    background: #222;
+    transition: background 0.2s;
+    display: block;
+    cursor: pointer;
+  }
+  
+  .uploadBox:hover {
+    background: #2a2a2a;
+  }
+  
+  .uploadInner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  
+  .subText {
+    color: #777;
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+  
+  .actionRow {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.6rem;
+  }
+  
+  .primaryBtn {
+    background: #0073ff;
+    color: white;
+    padding: 0.6rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  
+  .primaryBtn:hover {
+    background: #005ed9;
+  }
+  
+  /* Tabs + status */
+  .tabNavRow {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    position: relative;
+    margin-bottom: 0.75rem;
+  }
+  
+  .tabNav {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 0 auto;
+  }
+  
+  .tab {
+    background: transparent;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    color: #666;
+    padding: 0.5rem 0.8rem;
+    font-weight: 400;
+    transition: color 0.2s;
+  }
+  
+  .tab:hover {
+    color: #aaa;
+    background-color: transparent; /* no background on hover */
+  }
+  
+  .active {
+    color: white;
+  }
+  
+  /* Two columns */
+  .columns {
+    display: flex;
+    gap: 2rem;
+  }
+  
+  .left {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+  
+  .right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  @media (max-width: 1024px) {
+    .columns {
+      flex-direction: column;
+    }
+    .left,
+    .right {
+      width: 100%;
+    }
+  }
+  
+  /* Engine status */
+  .engineStatus {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: #888;
+    border: 1px solid #888;
+    padding: 0.3rem 0.7rem;
+    border-radius: 5px;
+  }
+  
+  .statusDot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+  }
+  
+  .online {
+    background: linear-gradient(135deg, #00d084, #12b76a);
+    box-shadow: 0 0 8px rgba(18, 183, 106, 0.6),
+      0 0 15px rgba(0, 208, 132, 0.5);
+  }
+  
+  .offline {
+    background-color: #666;
+  }
+  
+  .engineStatus.onlineStatus {
+    border: 1px solid #00d084;
+    color: #00d084;
+    background: rgba(0, 208, 132, 0.1);
+    backdrop-filter: blur(4px);
+  }
+  

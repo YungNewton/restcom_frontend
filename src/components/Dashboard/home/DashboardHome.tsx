@@ -60,9 +60,9 @@ const DashboardHome = () => {
     {
       title: 'Image Generator',
       icon: <Shapes color="#0073FF" size={20} />,
-      description: 'Logo generator and image search tool.',
-      sub: 'Enables manual or AI-generated email messages and targeted or global send-outs based on the scraped contact list.',
-      path: '/logo',
+      description: 'AI image generation & editing.',
+      sub: 'Generate images from text, transform existing ones with context, or edit areas using Masking — all with optional LoRA styles.',
+      path: '/image',
     }
   ]
 

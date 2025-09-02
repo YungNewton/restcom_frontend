@@ -25,7 +25,7 @@ const Voice = () => {
         if (isOnline) {
           toast.success('Voice Engine is live.');
         } else {
-          toast.error('Voice Engine offline.');
+          // toast.error('Voice Engine offline.');
         }
       } catch (err) {
         console.error('Error parsing SSE data:', err);
@@ -69,13 +69,15 @@ const Voice = () => {
           </button>
         </div>
 
-        <div className={styles.engineStatus}>
+        <div
+          className={`${styles.engineStatus} ${engineOnline ? styles.onlineStatus : ''}`}
+        >
           <div
             className={`${styles.statusDot} ${
               engineOnline ? styles.online : styles.offline
             }`}
           ></div>
-          <span>Voice Engine {engineOnline ? 'Online' : 'Offline'}</span>
+          <span>AI Engine {engineOnline ? 'Online' : 'Offline'}</span>
         </div>
       </div>
 

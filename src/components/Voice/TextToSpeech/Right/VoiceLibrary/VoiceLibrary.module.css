@@ -159,14 +159,6 @@
   border-radius: 50%; /* stays circular */
 }
 
-/* Glow for dropdown actions (Rename/Delete/Use Voice) */
-.dropdownMenu button:hover {
-  background-color: #2a2a2a;
-  color: #4ea8ff; /* premium blue text */
-  box-shadow: 0 0 6px rgba(78, 168, 255, 0.4); /* rectangular glow */
-  border-radius: 6px; /* keep subtle rounded corners */
-}
-
 .dropdownMenu button {
   transition: color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }

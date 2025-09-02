@@ -73,12 +73,22 @@
   border-radius: 50%;
 }
 
+/* Premium green gradient + glow */
 .online {
-  background-color: #12b76a;
+  background: linear-gradient(135deg, #00d084, #12b76a);
+  box-shadow: 0 0 8px rgba(18, 183, 106, 0.6), 0 0 15px rgba(0, 208, 132, 0.5);
 }
 
 .offline {
   background-color: #666;
+}
+
+/* Engine status container upgrade when online */
+.engineStatus.onlineStatus {
+  border: 1px solid #00d084;
+  color: #00d084;
+  background: rgba(0, 208, 132, 0.1);
+  backdrop-filter: blur(4px);
 }
 
 /* ============ Main Content ============ */

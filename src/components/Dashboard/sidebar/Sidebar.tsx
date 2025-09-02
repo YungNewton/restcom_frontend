@@ -65,9 +65,9 @@ const Sidebar = ({ activePath }: SidebarProps) => {
             <Video size={18} />
             <span>Video Generator</span>
           </li>
-          <li className={`${styles.navItem} ${isActive('/logo') ? styles.active : ''}`} onClick={() => handleNav('/logo')}>
+          <li className={`${styles.navItem} ${isActive('/image') ? styles.active : ''}`} onClick={() => handleNav('/image')}>
             <Shapes size={18} />
-            <span>Logo Generator</span>
+            <span>Image Generator</span>
           </li>
           <li className={`${styles.navItem} ${isActive('/projects') ? styles.active : ''}`} onClick={() => handleNav('/projects')}>
             <Folder size={18} />

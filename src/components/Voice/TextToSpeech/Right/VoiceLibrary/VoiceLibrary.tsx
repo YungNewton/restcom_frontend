@@ -6,10 +6,12 @@ import {
   forwardRef,
 } from 'react';
 import { Play, Pause, MoreVertical, Search, Send, X } from 'lucide-react';
-import axios from 'axios';
 import styles from './VoiceLibrary.module.css';
 import avatar from '../../../../../assets/voice-avatar.png';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../../../../context/AuthContext' 
+import { useNavigate } from 'react-router-dom'
+import { api, getAxiosErrorMessage } from '../../../../../lib/api'
 
 interface VoiceLibraryProps {
   goToVoiceCloning: () => void;
@@ -33,7 +35,7 @@ interface Voice {
   voice_type?: 'cloned' | 'seed';       // ADD
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
   ({ goToVoiceCloning, hideCloneButton = false, setSelectedVoiceFromLibrary }, ref) => {
@@ -53,30 +55,31 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
 
     const [highlightedVoice, setHighlightedVoice] = useState<string | null>(null);
 
+    const { logout } = useAuth()
+    const navigate = useNavigate()
+
     const handleRenameVoice = async (voiceId: string, name: string) => {
       try {
-        await axios.patch(`${API_BASE_URL}/voice/${voiceId}/`, { name }, { withCredentials: true });
-        setClonedVoices((prev) =>
-          prev.map((v) => (v.id === voiceId ? { ...v, name } : v))
-        );
-        setRenamingId(null);
-        toast.success('Voice renamed');
+        await api.patch(`/voice/${voiceId}/`, { name })
+        setClonedVoices((prev) => prev.map((v) => (v.id === voiceId ? { ...v, name } : v)))
+        setRenamingId(null)
+        toast.success('Voice renamed')
       } catch (err) {
-        console.error('Failed to rename voice', err);
-        toast.error('Rename failed');
+        console.error('Failed to rename voice', err)
+        toast.error(getAxiosErrorMessage(err))
       }
-    };
+    }
 
     const handleDeleteVoice = async (voiceId: string) => {
       try {
-        await axios.delete(`${API_BASE_URL}/voice/${voiceId}/`, { withCredentials: true });
-        toast.success('Voice deleted');
-        fetchVoices();
+        await api.delete(`/voice/${voiceId}/`)
+        toast.success('Voice deleted')
+        fetchVoices()
       } catch (err) {
-        console.error('Failed to delete voice', err);
-        toast.error('Delete failed');
+        console.error('Failed to delete voice', err)
+        toast.error(getAxiosErrorMessage(err))
       }
-    };
+    }
 
     const confirmDelete = (voice: Voice) => {
       toast(
@@ -108,14 +111,19 @@ const VoiceLibrary = forwardRef<VoiceLibraryRef, VoiceLibraryProps>(
 
     const fetchVoices = async () => {
       try {
-        const res = await axios.get(`${API_BASE_URL}/voice/library/`, {
-          withCredentials: true,
-        });
-        setClonedVoices(res.data.voices || []);
-      } catch (err) {
-        console.error('Failed to fetch voices', err);
+        const res = await api.get('/voice/library/')
+        setClonedVoices(res.data.voices || [])
+      } catch (err: any) {
+        // if interceptor logged you out + navigated, this may still run
+        console.error('Failed to fetch voices', err)
+        const status = err?.response?.status
+        if (status === 401 || status === 419) {
+          try { await logout() } finally { navigate('/login', { replace: true }) }
+          return
+        }
+        toast.error(getAxiosErrorMessage(err))
       }
-    };    
+    }
 
     useImperativeHandle(ref, () => ({
       refreshLibrary: async (voiceName?: string) => {

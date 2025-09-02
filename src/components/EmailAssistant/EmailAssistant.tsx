@@ -88,6 +88,88 @@ const EmailAssistant = () => {
   const [isSendingEmails, setIsSendingEmails] = useState(false)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // add near your other hooks:
+  const wsRef = useRef<WebSocket | null>(null);
+  // const [wsReady, setWsReady] = useState(false);
+
+  // Build ws:// or wss:// from your API_BASE_URL
+  function makeWsUrl() {
+    try {
+      const base = API_BASE_URL || window.location.origin;
+      const u = new URL(base);
+      u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+      // your backend routing: /ws/emails/generate-ai/
+      u.pathname = "/ws/emails/generate-ai/";
+      return u.toString();
+    } catch {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      return `${proto}://${location.host}/ws/emails/generate-ai/`;
+    }
+  }
+
+  function openSocket(): Promise<WebSocket> {
+    return new Promise((resolve, reject) => {
+      // Reuse if open
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        // setWsReady(true);
+        return resolve(wsRef.current);
+      }
+
+      // Close any stale socket
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch {}
+      }
+
+      const ws = new WebSocket(makeWsUrl());
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        // setWsReady(true);
+        resolve(ws);
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.event === "started") {
+            // optional: show “connected”
+            return;
+          }
+          if (msg.token) {
+            setAiResponse(prev => prev + msg.token);
+            return;
+          }
+          if (msg.done) {
+            setIsTyping(false);
+            setAskInput("");
+            // we can keep the socket for reuse or close now:
+            // ws.close();
+            return;
+          }
+          if (msg.error) {
+            setIsTyping(false);
+            setAskInput("");
+            toast.error(String(msg.error));
+          }
+        } catch (err) {
+          console.error("WS parse error:", err);
+        }
+      };
+
+      ws.onerror = (ev) => {
+        console.error("WS error:", ev);
+        setIsTyping(false);
+        setAskInput("");
+        reject(new Error("WebSocket error"));
+      };
+
+      ws.onclose = () => {
+        // setWsReady(false);
+        // don’t auto-reconnect during a single request
+      };
+    });
+  }
+
   const handleSendEmails = async () => {
     const subject = subjectRef.current?.value?.trim();
     const message = messageRef.current?.value?.trim();
@@ -234,102 +316,118 @@ const EmailAssistant = () => {
   }, [])
 
   const sendPrompt = async (prompt: string) => {
+    // If already streaming, cancel it
     if (isTyping) {
+      try { wsRef.current?.close(4001, "client cancel"); } catch {}
       controller?.abort();
       setIsTyping(false);
-      setAskInput('');
+      setAskInput("");
       return;
     }
-  
     if (!prompt.trim()) return;
   
-    setAiResponse('');
+    // UI setup
+    setAiResponse("");
     setIsTyping(true);
-    setAskInput('AI is thinking');
+    setAskInput("AI is thinking");
+    setLastPrompt(prompt);
   
-    await Promise.resolve();
-  
-    const abortController = new AbortController();
-    setController(abortController);
-  
+    // “...” animation
     let dotIndex = 0;
-    const dots = ['.', '..', '...'];
+    const dots = [".", "..", "..."];
     const animateInterval = setInterval(() => {
       setAskInput(`AI is thinking${dots[dotIndex % dots.length]}`);
       dotIndex++;
     }, 500);
   
-    try {
-      setLastPrompt(prompt);
+    // Abort controller (we'll close the WS on abort)
+    const abortController = new AbortController();
+    setController(abortController);
   
-      const res = await fetch(`${API_BASE_URL}/emails/generate-ai-email/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          history: conversationHistory,
-          stream: true,
-        }),
-        signal: abortController.signal,
+    let accum = "";
+    let aborted = false;
+  
+    try {
+      // Ensure socket is open (uses your openSocket helper & wsRef)
+      const ws = await openSocket();
+  
+      const cleanupAndFinish = (ok: boolean) => {
+        clearInterval(animateInterval);
+        setIsTyping(false);
+        setAskInput("");
+        if (ok && accum) {
+          setConversationHistory((prev) => [
+            ...prev,
+            { role: "user", content: prompt },
+            { role: "assistant", content: accum },
+          ]);
+        }
+      };
+  
+      await new Promise<void>((resolve, reject) => {
+        // Close on abort
+        const onAbort = () => {
+          aborted = true;
+          try { ws.close(4001, "client abort"); } catch {}
+        };
+        abortController.signal.addEventListener("abort", onAbort, { once: true });
+  
+        ws.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data);
+            if (msg.event === "started") return;
+  
+            if (msg.token) {
+              accum += msg.token;
+              setAiResponse((prev) => prev + msg.token);
+              return;
+            }
+  
+            if (msg.done) {
+              resolve();
+              return;
+            }
+  
+            if (msg.error) {
+              reject(new Error(String(msg.error)));
+            }
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error("WS parse error"));
+          }
+        };
+  
+        ws.onerror = () => reject(new Error("WebSocket error"));
+  
+        ws.onclose = (ev) => {
+          // If closed before "done" and not aborted, treat as error; otherwise resolve.
+          if (!aborted && ev.code !== 1000 && !accum) {
+            reject(new Error(`WebSocket closed (${ev.code})`));
+          } else {
+            resolve();
+          }
+        };
+  
+        // Send the job once socket is open (openSocket() resolves on open, but guard just in case)
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ prompt, history: conversationHistory || [] }));
+        } else {
+          ws.addEventListener("open", () => {
+            ws.send(JSON.stringify({ prompt, history: conversationHistory || [] }));
+          }, { once: true });
+        }
       });
   
-      if (!res.ok || !res.body) {
-        const error = await res.text();
-        throw new Error(error || 'Request failed');
-      }
-  
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let done = false;
-  
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        const chunk = decoder.decode(value);
-  
-        const lines = chunk
-          .split('\n')
-          .filter((line) => line.trim().startsWith('data:'));
-  
-        for (const line of lines) {
-          const data = line.replace('data: ', '').trim();
-          if (data === '[DONE]') {
-            done = true;
-            break;
-          }
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.token) {
-              setAiResponse((prev) => prev + parsed.token);
-            }
-            if (parsed.error) {
-              throw parsed.error;
-            }
-          } catch (e) {
-            console.error('Parse error:', e);
-          }
-        }
-      }
-  
-      clearInterval(animateInterval);
-      setIsTyping(false);
-      setAskInput('');
-  
-      setConversationHistory((prev) => [
-        ...prev,
-        { role: 'user', content: prompt },
-        { role: 'assistant', content: aiResponse },
-      ]);
+      cleanupAndFinish(true);
     } catch (error) {
-      console.error('Streaming error:', error);
+      console.error("WS streaming error:", error);
       clearInterval(animateInterval);
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        setAiResponse('Request cancelled.');
-      } else {
-        setAiResponse(`Something went wrong: ${error}`);
-      }
       setIsTyping(false);
-      setAskInput('');
+      setAskInput("");
+      if (aborted) {
+        setAiResponse("Request cancelled.");
+      } else {
+        setAiResponse(`Something went wrong: ${String(error)}`);
+      }
     } finally {
       setController(null);
     }
@@ -339,6 +437,12 @@ const EmailAssistant = () => {
     if (!askInput.trim()) return
     sendPrompt(askInput.trim())
   }  
+
+  useEffect(() => {
+    return () => {
+      try { wsRef.current?.close(); } catch {}
+    };
+  }, []);  
 
   return (
     <div className={styles.wrapper}>

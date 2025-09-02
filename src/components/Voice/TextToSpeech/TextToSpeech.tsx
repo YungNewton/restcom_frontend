@@ -97,9 +97,16 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [audioKey, setAudioKey] = useState(0);
+  const playbackRef = useRef<HTMLDivElement>(null)
+
+  const [outputVoice, setOutputVoice] = useState<{
+    id: string; name: string; avatar: string;
+    reference_audio_url?: string | null;
+    reference_transcript?: string | null;
+    voice_type?: 'cloned' | 'seed';
+  } | null>(null)
 
   const sampleTexts = [
-    "[S1] Morning, Alex! (laughs)\n[S2] You're in a good mood today.\n[S1] Coffee does that to me.\n[S2] Then let’s grab one before the meeting, shall we?",
     "Welcome to our daily briefing. (clears throat) Today, we’ll talk about three major updates, starting with our product launch timeline and marketing goals.",
     "The weekend’s here! (sighs) Finally, a chance to unwind, read that book you’ve been ignoring, and maybe even take a nap or two. You deserve it.",
     "[S1] Did you hear that sound? (gasps)\n[S2] Relax, it’s just the wind.\n[S1] Well, it sounded like footsteps.\n[S2] (laughs) Too many late-night movies.",
@@ -169,6 +176,14 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
       if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
   }, [audioUrl]);
+
+  useEffect(() => {
+    if (showPlayback && audioUrl) {
+      requestAnimationFrame(() => {
+        playbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    }
+  }, [showPlayback, audioUrl])
   
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -330,6 +345,8 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
       toast.error('Please enter text or upload a file.');
       return;
     }    
+
+    setOutputVoice(selectedVoice);
   
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -465,6 +482,9 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
           toast.dismiss();
           toast.success('Speech ready!');
 
+          requestAnimationFrame(() => {
+            playbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          })
   
           return;
         }
@@ -682,7 +702,7 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
         </div>
 
         {showPlayback && audioUrl && (
-          <div className={styles.playbackContainer}>
+          <div className={styles.playbackContainer} ref={playbackRef}>
             <audio
               key={audioKey}
               ref={audioRef}
@@ -712,8 +732,8 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({
 
             <div className={styles.timeline}>
               <div className={styles.voiceTag}>
-                <img src={selectedVoice.avatar} alt="avatar" />
-                <span>Output: {selectedVoice.name}</span>
+                <img src={(outputVoice?.avatar) || selectedVoice.avatar} alt="avatar" />
+                <span>Output: {(outputVoice?.name) || selectedVoice.name}</span>
               </div>
 
               <span>{formatTime(currentTime)}</span>
