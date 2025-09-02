@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+// src/components/TextToImage/TextToImage.tsx
+import { useMemo, useRef, useState, useEffect } from 'react'
 import type { GeneralSettingsState } from '../Settings'
 import {
   Sparkles, Info, ChevronDown, ChevronUp, CircleStop, Send, RefreshCcw, Copy, CornerDownLeft
@@ -15,6 +16,14 @@ type Props = {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+
+// --- WS endpoints (adjust if your backend uses different paths) ---
+const WS_PATHS = {
+  chat: '/ws/emails/generate-ai/',
+  refine: '/ws/images/refine-prompt/',
+  negatives: '/ws/images/suggest-negatives/',
+}
+
 const countWords = (s: string) => (s.trim() ? s.trim().split(/\s+/).filter(Boolean).length : 0)
 const FLUX_PROMPT_GUIDE_TOKENS = 512
 
@@ -41,15 +50,64 @@ export default function TextToImage({ engineOnline }: Props) {
   const [askInput, setAskInput] = useState('')
   const [aiResponse, setAiResponse] = useState('')
   const [isTyping, setIsTyping] = useState(false)
-  const controllerRef = useRef<AbortController | null>(null)
   const dotsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [conversationHistory, setConversationHistory] = useState<any[]>([])
   const [lastPrompt, setLastPrompt] = useState('')
   const [isRefining, setIsRefining] = useState(false)
   const [isSuggesting, setIsSuggesting] = useState(false)
 
+  // three dedicated sockets (chat / refine / negatives)
+  const wsChatRef = useRef<WebSocket | null>(null)
+  const wsRefineRef = useRef<WebSocket | null>(null)
+  const wsNegRef = useRef<WebSocket | null>(null)
+
   const promptCount = useMemo(() => countWords(prompt), [prompt])
   const negativeCount = useMemo(() => countWords(negative), [negative])
+
+  // --- utils ---
+  function makeWsUrl(path: string) {
+    try {
+      const base = API_BASE_URL || window.location.origin
+      const u = new URL(base)
+      u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
+      u.pathname = path
+      return u.toString()
+    } catch {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+      return `${proto}://${location.host}${path}`
+    }
+  }
+
+  function openSocket(path: string, ref: React.MutableRefObject<WebSocket | null>): Promise<WebSocket> {
+    return new Promise((resolve, reject) => {
+      // reuse if already open
+      if (ref.current && ref.current.readyState === WebSocket.OPEN) {
+        return resolve(ref.current)
+      }
+      // close stale
+      if (ref.current) {
+        try { ref.current.close() } catch {}
+      }
+      const ws = new WebSocket(makeWsUrl(path))
+      ref.current = ws
+
+      ws.onopen = () => resolve(ws)
+      ws.onerror = (ev) => {
+        console.error('WebSocket error:', ev)
+        reject(new Error('WebSocket error'))
+      }
+      // caller sets .onmessage / .onclose as needed
+    })
+  }
+
+  // cleanup on unmount
+  useEffect(() => {
+    return () => {
+      try { wsChatRef.current?.close() } catch {}
+      try { wsRefineRef.current?.close() } catch {}
+      try { wsNegRef.current?.close() } catch {}
+    }
+  }, [])
 
   const handleStartEngine = async () => {
     toast.loading('Starting Image Engine...')
@@ -71,111 +129,103 @@ export default function TextToImage({ engineOnline }: Props) {
     // TODO: POST { prompt, negative, ...settings } to your image endpoint
   }
 
-  const streamToState = async (
-    res: Response,
-    onChunk: (s: string) => void
-  ) => {
-    const reader = res.body!.getReader()
-    const decoder = new TextDecoder('utf-8')
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      const chunk = decoder.decode(value)
-  
-      // Expecting SSE "data: {token: '...'}"
-      const lines = chunk.split('\n').filter(l => l.trim().startsWith('data:'))
-      if (lines.length) {
-        for (const line of lines) {
-          const data = line.replace('data: ', '').trim()
-          if (data === '[DONE]') {
-            reader.cancel?.()
-            break
-          }
-          try {
-            const parsed = JSON.parse(data)
-            if (parsed.token) onChunk(parsed.token)
-            else if (typeof parsed === 'string') onChunk(parsed)
-          } catch {
-            onChunk(data)
-          }
-        }
-      } else {
-        // fallback: raw append
-        onChunk(chunk)
-      }
-    }
-  }
+  // --- WS versions for Refine + Negatives ---
 
   const handleRefinePrompt = async () => {
-    if (!prompt.trim()) {
-      toast.error('Write a prompt first.')
-      return
-    }
-    if (isRefining) return
-  
+    if (!prompt.trim() || isRefining) return
     setIsRefining(true)
-    // optionally keep original so user can undo if you add an undo later
-    setPrompt('') // stream replaces it progressively
-  
+    const original = prompt
+    setPrompt('') // stream refined version progressively
+
     try {
-      const res = await fetch(`${API_BASE_URL}/images/refine-prompt/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // backend streams ONLY the refined prompt
-        body: JSON.stringify({ prompt, stream: true }),
-      })
-      if (!res.ok || !res.body) {
-        const t = await res.text()
-        throw new Error(t || 'Failed to refine prompt')
+      const ws = await openSocket(WS_PATHS.refine, wsRefineRef)
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data)
+          if (msg.event === 'started') return
+          if (msg.token) {
+            setPrompt(prev => (prev || '') + msg.token)
+            return
+          }
+          if (msg.done) {
+            setIsRefining(false)
+            return
+          }
+          if (msg.error) {
+            toast.error(String(msg.error))
+            setIsRefining(false)
+          }
+        } catch {
+          // fallback: append raw
+          setPrompt(prev => (prev || '') + String(e.data || ''))
+        }
       }
-  
-      await streamToState(res, (s) => {
-        // progressively write refined prompt
-        setPrompt(prev => (prev || '') + s)
-      })
-    } catch (e: any) {
-      toast.error(e?.message || 'Refine failed')
-    } finally {
+
+      ws.onclose = (_ev) => {
+        if (isRefining) setIsRefining(false)
+      }
+
+      // send job
+      const payload = { prompt: original }
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload))
+      } else {
+        ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Refine failed')
       setIsRefining(false)
     }
   }
-  
-  // --- suggest negatives (uses image route) ---
+
   const handleSuggestWithAI = async () => {
-    if (!prompt.trim()) {
-      toast.error('Write a prompt first.')
-      return
-    }
-    if (isSuggesting) return
-  
+    if (!prompt.trim() || isSuggesting) return
     setIsSuggesting(true)
-    setNegative('') // stream replaces it progressively
-  
+    setNegative('') // stream negatives progressively
+
     try {
-      const res = await fetch(`${API_BASE_URL}/images/suggest-negatives/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // backend streams ONLY a single comma-separated negatives line
-        body: JSON.stringify({ prompt, stream: true }),
-      })
-      if (!res.ok || !res.body) {
-        const t = await res.text()
-        throw new Error(t || 'Failed to suggest negatives')
+      const ws = await openSocket(WS_PATHS.negatives, wsNegRef)
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data)
+          if (msg.event === 'started') return
+          if (msg.token) {
+            setNegative(prev => (prev || '') + msg.token)
+            return
+          }
+          if (msg.done) {
+            setIsSuggesting(false)
+            return
+          }
+          if (msg.error) {
+            toast.error(String(msg.error))
+            setIsSuggesting(false)
+          }
+        } catch {
+          setNegative(prev => (prev || '') + String(e.data || ''))
+        }
       }
-  
-      await streamToState(res, (s) => {
-        setNegative(prev => (prev || '') + s)
-      })
-    } catch (e: any) {
-      toast.error(e?.message || 'Suggestion failed')
-    } finally {
+
+      ws.onclose = () => {
+        if (isSuggesting) setIsSuggesting(false)
+      }
+
+      const payload = { prompt }
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload))
+      } else {
+        ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Suggestion failed')
       setIsSuggesting(false)
     }
   }
 
-  const applyTemplate = (t: string) => setPrompt(t)
+  // ——— Chat: WS version (reuses /ws/emails/generate-ai/) ———
 
-  // ——— Chat: identical “ask / cancel + streaming + animation” pattern ———
   const startThinkingAnimation = () => {
     let i = 0
     setAskInput('AI is thinking')
@@ -195,98 +245,87 @@ export default function TextToImage({ engineOnline }: Props) {
 
   const sendChatPrompt = async (text: string) => {
     if (isTyping) {
-      controllerRef.current?.abort()
+      try { wsChatRef.current?.close(4001, 'client cancel') } catch {}
       return
     }
     if (!text.trim()) return
-  
+
     setAiResponse('')
     setIsTyping(true)
     setLastPrompt(text)
     startThinkingAnimation()
-  
-    const ac = new AbortController()
-    controllerRef.current = ac
-  
+
+    let full = ''
+
     try {
-      // ✅ IDENTICAL PAYLOAD SHAPE TO EMAIL ASSISTANT (+ keep your negative)
-      const res = await fetch(`${API_BASE_URL}/emails/generate-ai-email/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: text,
-          history: conversationHistory, // keep thread
-          stream: true,                 // force SSE tokens like EmailAssistant
-          negative,                     // fine if backend ignores it
-        }),
-        signal: ac.signal,
-      })
-  
-      if (!res.ok || !res.body) {
-        const errText = await res.text()
-        throw new Error(errText || 'Request failed')
-      }
-  
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder('utf-8')
-  
-      // local buffer to commit to history at the end (prevents race w/ state)
-      let full = ''
-  
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value)
-  
-        // Same SSE handling as EmailAssistant
-        const lines = chunk
-          .split('\n')
-          .filter((line) => line.trim().startsWith('data:'))
-  
-        for (const line of lines) {
-          const data = line.replace('data: ', '').trim()
-          if (data === '[DONE]') {
-            // stop streaming cleanly
-            reader.cancel?.()
-            break
+      const ws = await openSocket(WS_PATHS.chat, wsChatRef)
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data)
+          if (msg.event === 'started') return
+
+          if (msg.token) {
+            full += msg.token
+            setAiResponse(prev => prev + msg.token)
+            return
           }
-          try {
-            const parsed = JSON.parse(data)
-            if (parsed.token) {
-              full += parsed.token
-              setAiResponse((prev) => prev + parsed.token)
-            } else if (typeof parsed === 'string') {
-              full += parsed
-              setAiResponse((prev) => prev + parsed)
-            }
-          } catch {
-            // non-JSON chunk
-            full += data
-            setAiResponse((prev) => prev + data)
+          if (msg.done) {
+            setIsTyping(false)
+            stopThinkingAnimation()
+            setConversationHistory(prev => [
+              ...prev,
+              { role: 'user', content: text },
+              { role: 'assistant', content: full },
+            ])
+            return
           }
+          if (msg.error) {
+            setIsTyping(false)
+            stopThinkingAnimation()
+            toast.error(String(msg.error))
+          }
+        } catch (err) {
+          // non-JSON chunk
+          const s = String(e.data || '')
+          full += s
+          setAiResponse(prev => prev + s)
         }
       }
-  
-      // ✅ commit to history like EmailAssistant
-      setConversationHistory((prev) => [
-        ...prev,
-        { role: 'user', content: text },
-        { role: 'assistant', content: full },
-      ])
-    } catch (e: any) {
-      if (e?.name !== 'AbortError') {
-        setAiResponse((prev) => (prev || '') + '\n\n[Error receiving response]')
+
+      ws.onerror = () => {
+        setIsTyping(false)
+        stopThinkingAnimation()
+        toast.error('WebSocket error')
       }
-    } finally {
+
+      ws.onclose = (_ev) => {
+        // if closed early without done, leave whatever we got
+        if (isTyping) {
+          setIsTyping(false)
+          stopThinkingAnimation()
+        }
+      }
+
+      const payload = {
+        prompt: text,
+        history: conversationHistory || [],
+      }
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload))
+      } else {
+        ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
+      }
+    } catch (e: any) {
       setIsTyping(false)
-      controllerRef.current = null
       stopThinkingAnimation()
+      toast.error(e?.message || 'Failed to start chat')
     }
-  }  
+  }
 
   const handleChatAsk = () => {
     if (isTyping) {
-      controllerRef.current?.abort()
+      try { wsChatRef.current?.close(4001, 'client cancel') } catch {}
       return
     }
     if (!askInput.trim()) return
@@ -314,6 +353,8 @@ export default function TextToImage({ engineOnline }: Props) {
     toast.success('Inserted into Prompt')
   }
 
+  const applyTemplate = (t: string) => setPrompt(t)
+
   return (
     <div className={styles.wrap}>
       {/* Prompt */}
@@ -335,37 +376,37 @@ export default function TextToImage({ engineOnline }: Props) {
 
         {/* Refine + Chat toggle row */}
         <div className={styles.actionRowSplit}>
-        <div className={styles.actionGroupLeft}>
+          <div className={styles.actionGroupLeft}>
             <button
-            className={styles.magicBtn}
-            onClick={handleRefinePrompt}
-            type="button"
-            disabled={isRefining || !prompt.trim()}
-            aria-disabled={isRefining || !prompt.trim()}
+              className={styles.magicBtn}
+              onClick={handleRefinePrompt}
+              type="button"
+              disabled={isRefining || !prompt.trim()}
+              aria-disabled={isRefining || !prompt.trim()}
             >
-            {isRefining ? (<span className={styles.spinnerMini} />) : (<Sparkles size={16} />)}
-            {isRefining ? 'Refining…' : 'Refine Prompt with AI'}
+              {isRefining ? (<span className={styles.spinnerMini} />) : (<Sparkles size={16} />)}
+              {isRefining ? 'Refining…' : 'Refine Prompt with AI'}
             </button>
 
             <button
-            className={styles.chatToggleBtn}
-            type="button"
-            onClick={() => setShowChat((s) => !s)}
-            aria-expanded={showChat}
-            aria-controls="promptChatPanel"
-            title="Open chat refinement panel"
+              className={styles.chatToggleBtn}
+              type="button"
+              onClick={() => setShowChat((s) => !s)}
+              aria-expanded={showChat}
+              aria-controls="promptChatPanel"
+              title="Open chat refinement panel"
             >
-            {showChat ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            Chat instead
+              {showChat ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              Chat instead
             </button>
-        </div>
-        <div />
+          </div>
+          <div />
         </div>
 
         {/* Collapsible Chat Panel */}
         {showChat && (
           <div id="promptChatPanel" className={styles.chatCard}>
-            {/* Input + Send/Stop (identical behavior to Email Assistant) */}
+            {/* Input + Send/Stop */}
             <div className={styles.chatPromptBar}>
               <input
                 type="text"
@@ -386,14 +427,14 @@ export default function TextToImage({ engineOnline }: Props) {
 
             {/* Response box */}
             <div className={styles.chatResponseBox}>
-            <div className={styles.chatResponseText}>
+              <div className={styles.chatResponseText}>
                 <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
-                {aiResponse}
+                  {aiResponse}
                 </ReactMarkdown>
-            </div>
+              </div>
             </div>
 
-            {/* Actions with tooltips (regen / copy / insert-to-prompt icon) */}
+            {/* Actions */}
             <div className={styles.chatActions}>
               <div className={styles.left}>
                 <div className={styles.tooltipWrapper} data-tooltip="Regenerate">
@@ -454,21 +495,21 @@ export default function TextToImage({ engineOnline }: Props) {
         />
 
         <div className={styles.actionRowLeft}>
-        <button
+          <button
             className={styles.magicBtn}
             onClick={handleSuggestWithAI}
             type="button"
             disabled={isSuggesting || !prompt.trim()}
             aria-disabled={isSuggesting || !prompt.trim()}
             title={!prompt.trim() ? 'Enter a prompt first' : 'Suggest negatives'}
-        >
+          >
             {isSuggesting ? (<span className={styles.spinnerMini} />) : (<Sparkles size={16} />)}
             {isSuggesting ? 'Suggesting…' : 'Suggest with AI'}
-        </button>
+          </button>
         </div>
       </div>
 
-      {/* Tips (collapsible, TTS style) */}
+      {/* Tips (collapsible) */}
       <div className={styles.infoBox}>
         <div className={styles.infoHeader} onClick={() => setShowTips(!showTips)}>
           <Info size={20} />
