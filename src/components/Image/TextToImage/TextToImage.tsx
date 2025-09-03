@@ -12,12 +12,12 @@ import rehypeSanitize from 'rehype-sanitize'
 
 type Props = {
   engineOnline: boolean
-  settings: GeneralSettingsState
+  settings?: GeneralSettingsState // optional for now (handleGenerate paused)
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
-// --- WS endpoints (adjust if your backend uses different paths) ---
+// --- WS endpoints (image-aligned) ---
 const WS_PATHS = {
   chat: '/ws/emails/generate-ai/',
   refine: '/ws/images/refine-prompt/',
@@ -46,14 +46,18 @@ export default function TextToImage({ engineOnline }: Props) {
   const [showTips, setShowTips] = useState(false)
   const [showChat, setShowChat] = useState(false)
 
-  // mini-chat state (mirrors Email Assistant behavior)
+  // mini-chat state (refinement chat)
   const [askInput, setAskInput] = useState('')
   const [aiResponse, setAiResponse] = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [thinkingLabel, setThinkingLabel] = useState('') // decoupled from askInput
   const dotsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [conversationHistory, setConversationHistory] = useState<any[]>([])
   const [lastPrompt, setLastPrompt] = useState('')
+
   const [isRefining, setIsRefining] = useState(false)
+  const [refinedDraft, setRefinedDraft] = useState('') // stream refined text here
+
   const [isSuggesting, setIsSuggesting] = useState(false)
 
   // three dedicated sockets (chat / refine / negatives)
@@ -61,8 +65,8 @@ export default function TextToImage({ engineOnline }: Props) {
   const wsRefineRef = useRef<WebSocket | null>(null)
   const wsNegRef = useRef<WebSocket | null>(null)
 
-  const promptCount = useMemo(() => countWords(prompt), [prompt])
-  const negativeCount = useMemo(() => countWords(negative), [negative])
+  const promptWordCount = useMemo(() => countWords(prompt), [prompt])
+  const negativeWordCount = useMemo(() => countWords(negative), [negative])
 
   // --- utils ---
   function makeWsUrl(path: string) {
@@ -80,11 +84,9 @@ export default function TextToImage({ engineOnline }: Props) {
 
   function openSocket(path: string, ref: React.MutableRefObject<WebSocket | null>): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
-      // reuse if already open
       if (ref.current && ref.current.readyState === WebSocket.OPEN) {
         return resolve(ref.current)
       }
-      // close stale
       if (ref.current) {
         try { ref.current.close() } catch {}
       }
@@ -96,7 +98,6 @@ export default function TextToImage({ engineOnline }: Props) {
         console.error('WebSocket error:', ev)
         reject(new Error('WebSocket error'))
       }
-      // caller sets .onmessage / .onclose as needed
     })
   }
 
@@ -106,13 +107,14 @@ export default function TextToImage({ engineOnline }: Props) {
       try { wsChatRef.current?.close() } catch {}
       try { wsRefineRef.current?.close() } catch {}
       try { wsNegRef.current?.close() } catch {}
+      if (dotsTimerRef.current) clearInterval(dotsTimerRef.current)
     }
   }, [])
 
   const handleStartEngine = async () => {
     toast.loading('Starting Image Engine...')
     try {
-      const res = await axios.post(`${API_BASE_URL}/voice/start-runpod/`)
+      const res = await axios.post(`${API_BASE_URL}/image/start-runpod/`)
       toast.dismiss()
       const status = res.data.status
       if (['RUNNING', 'STARTING', 'REQUESTED'].includes(status)) toast.success('Image Engine is starting.')
@@ -126,16 +128,14 @@ export default function TextToImage({ engineOnline }: Props) {
 
   const handleGenerate = () => {
     if (!engineOnline || !prompt.trim()) return
-    // TODO: POST { prompt, negative, ...settings } to your image endpoint
+    // paused for now – wire later
   }
 
-  // --- WS versions for Refine + Negatives ---
-
+  // --- WS: Refine Prompt (streams into refinedDraft) ---
   const handleRefinePrompt = async () => {
     if (!prompt.trim() || isRefining) return
     setIsRefining(true)
-    const original = prompt
-    setPrompt('') // stream refined version progressively
+    setRefinedDraft('')
 
     try {
       const ws = await openSocket(WS_PATHS.refine, wsRefineRef)
@@ -145,7 +145,7 @@ export default function TextToImage({ engineOnline }: Props) {
           const msg = JSON.parse(e.data)
           if (msg.event === 'started') return
           if (msg.token) {
-            setPrompt(prev => (prev || '') + msg.token)
+            setRefinedDraft(prev => (prev || '') + msg.token)
             return
           }
           if (msg.done) {
@@ -157,17 +157,15 @@ export default function TextToImage({ engineOnline }: Props) {
             setIsRefining(false)
           }
         } catch {
-          // fallback: append raw
-          setPrompt(prev => (prev || '') + String(e.data || ''))
+          setRefinedDraft(prev => (prev || '') + String(e.data || ''))
         }
       }
 
-      ws.onclose = (_ev) => {
+      ws.onclose = () => {
         if (isRefining) setIsRefining(false)
       }
 
-      // send job
-      const payload = { prompt: original }
+      const payload = { prompt }
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(payload))
       } else {
@@ -179,10 +177,11 @@ export default function TextToImage({ engineOnline }: Props) {
     }
   }
 
+  // --- WS: Suggest Negatives (streams into negative) ---
   const handleSuggestWithAI = async () => {
     if (!prompt.trim() || isSuggesting) return
     setIsSuggesting(true)
-    setNegative('') // stream negatives progressively
+    setNegative('')
 
     try {
       const ws = await openSocket(WS_PATHS.negatives, wsNegRef)
@@ -224,14 +223,13 @@ export default function TextToImage({ engineOnline }: Props) {
     }
   }
 
-  // ——— Chat: WS version (reuses /ws/emails/generate-ai/) ———
-
+  // ——— Chat: WS (decouple thinking label from input) ———
   const startThinkingAnimation = () => {
     let i = 0
-    setAskInput('AI is thinking')
+    setThinkingLabel('AI is thinking')
     dotsTimerRef.current = setInterval(() => {
       const dots = ['.', '..', '...']
-      setAskInput(`AI is thinking${dots[i % dots.length]}`)
+      setThinkingLabel(`AI is thinking${dots[i % dots.length]}`)
       i++
     }, 500)
   }
@@ -240,7 +238,7 @@ export default function TextToImage({ engineOnline }: Props) {
       clearInterval(dotsTimerRef.current)
       dotsTimerRef.current = null
     }
-    setAskInput('')
+    setThinkingLabel('')
   }
 
   const sendChatPrompt = async (text: string) => {
@@ -285,8 +283,7 @@ export default function TextToImage({ engineOnline }: Props) {
             stopThinkingAnimation()
             toast.error(String(msg.error))
           }
-        } catch (err) {
-          // non-JSON chunk
+        } catch {
           const s = String(e.data || '')
           full += s
           setAiResponse(prev => prev + s)
@@ -299,8 +296,7 @@ export default function TextToImage({ engineOnline }: Props) {
         toast.error('WebSocket error')
       }
 
-      ws.onclose = (_ev) => {
-        // if closed early without done, leave whatever we got
+      ws.onclose = () => {
         if (isTyping) {
           setIsTyping(false)
           stopThinkingAnimation()
@@ -328,8 +324,11 @@ export default function TextToImage({ engineOnline }: Props) {
       try { wsChatRef.current?.close(4001, 'client cancel') } catch {}
       return
     }
-    if (!askInput.trim()) return
-    sendChatPrompt(askInput.trim())
+    const text = askInput.trim()
+    if (!text) return
+  
+    setAskInput('')
+    sendChatPrompt(text)
   }
 
   const handleRegenerate = () => {
@@ -355,6 +354,9 @@ export default function TextToImage({ engineOnline }: Props) {
 
   const applyTemplate = (t: string) => setPrompt(t)
 
+  const CHAR_SOFT_LIMIT = 1000
+  const overLimit = prompt.length > CHAR_SOFT_LIMIT
+
   return (
     <div className={styles.wrap}>
       {/* Prompt */}
@@ -362,7 +364,7 @@ export default function TextToImage({ engineOnline }: Props) {
         <div className={styles.labelRow}>
           <h3 className={styles.sectionHeader}>Prompt</h3>
           <span className={styles.counter} aria-live="polite">
-            {promptCount} tokens
+            {promptWordCount} words
           </span>
         </div>
 
@@ -372,7 +374,18 @@ export default function TextToImage({ engineOnline }: Props) {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           rows={6}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              e.preventDefault()
+              handleGenerate()
+            }
+          }}
         />
+        {overLimit && (
+          <div className={styles.softWarn}>
+            Long prompts may truncate—consider trimming for FLUX (dev).
+          </div>
+        )}
 
         {/* Refine + Chat toggle row */}
         <div className={styles.actionRowSplit}>
@@ -403,6 +416,32 @@ export default function TextToImage({ engineOnline }: Props) {
           <div />
         </div>
 
+        {/* Refined preview (apply/discard) */}
+        {!!refinedDraft && !isRefining && (
+          <div className={styles.refinePreview}>
+            <div className={styles.previewHeader}>
+              <span>Refined preview</span>
+              <div className={styles.previewActions}>
+                <button onClick={() => setRefinedDraft('')} className={styles.secondaryBtn}>
+                  Discard
+                </button>
+                <button
+                  onClick={() => { setPrompt(refinedDraft.trim()); setRefinedDraft('') }}
+                  className={styles.primaryBtnSm}
+                >
+                  Apply to Prompt
+                </button>
+              </div>
+            </div>
+            <textarea
+              className={`${styles.input} ${styles.textarea}`}
+              value={refinedDraft}
+              readOnly
+              rows={4}
+            />
+          </div>
+        )}
+
         {/* Collapsible Chat Panel */}
         {showChat && (
           <div id="promptChatPanel" className={styles.chatCard}>
@@ -420,14 +459,17 @@ export default function TextToImage({ engineOnline }: Props) {
                   }
                 }}
               />
-              <button className={styles.chatSendBtn} onClick={handleChatAsk} type="button">
+              <button className={styles.chatSendBtn} onClick={handleChatAsk} type="button" title={isTyping ? 'Stop' : 'Send'}>
                 {isTyping ? <CircleStop size={18} /> : <Send size={18} />}
               </button>
             </div>
+            {isTyping && thinkingLabel && (
+              <div className={styles.chatThinking}>{thinkingLabel}</div>
+            )}
 
             {/* Response box */}
             <div className={styles.chatResponseBox}>
-              <div className={styles.chatResponseText}>
+              <div className={styles.chatResponseText} aria-live="polite">
                 <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
                   {aiResponse}
                 </ReactMarkdown>
@@ -482,7 +524,7 @@ export default function TextToImage({ engineOnline }: Props) {
         <div className={styles.labelRow}>
           <h3 className={styles.sectionHeader}>Negative Prompt</h3>
           <span className={styles.counter} aria-live="polite">
-            {negativeCount} tokens
+            {negativeWordCount} words
           </span>
         </div>
 

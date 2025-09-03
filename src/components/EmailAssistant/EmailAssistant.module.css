@@ -114,8 +114,14 @@
   .playBtn:hover {
     transform: scale(1.15) rotate(5deg);
     filter: brightness(1.3);
-  }  
+  }
 
+  .thinkingLabel {
+    margin-top: 0.3rem;
+    font-size: 0.85rem;
+    color: #9fb8ff;
+  }
+  
   .promptSuggestions {
     display: flex;
     overflow-x: auto;

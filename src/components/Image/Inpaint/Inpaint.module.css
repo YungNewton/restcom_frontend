@@ -1,5 +1,5 @@
-/* src/components/TextToImage/TextToImage.module.css */
-/* Local-only styles for TextToImage — refined contrast + responsive */
+/* src/components/ImageToImage/ImageToImage.module.css */
+/* Local-only styles for ImageToImage & Inpaint — mirrors TextToImage with single-image preview */
 
 /* ---------- Base layout ---------- */
 .wrap {
@@ -37,6 +37,81 @@
     font-size: 0.8rem;
   }
   
+  /* ---------- Upload (single image) ---------- */
+  .uploadBox {
+    display: block;        /* <— key fix */
+    position: relative;    /* stable for absolutely positioned children, if any */
+    overflow: hidden;      /* avoids odd bleed with border radius */
+    border: 1px dashed #444;
+    border-radius: 12px;
+    background: #1f1f1f;
+    padding: 0.9rem;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    user-select: none;
+  }
+
+  .uploadBox:hover {
+    background: #242424;
+    border-color: #505050;
+    box-shadow: 0 0 0 1px #2a2a2a;
+  }
+  
+  .uploadInner {
+    display: grid;
+    place-items: center;
+    gap: 0.35rem;
+    text-align: center;
+    color: #dfe7f7;
+  }
+  .uploadInner p {
+    margin: 0;
+    font-size: 0.9rem;
+  }
+  .subText {
+    color: #8a94a3;
+    font-size: 0.78rem;
+  }
+  
+  /* Preview frame for single image */
+  .previewWrap {
+    position: relative;
+    display: inline-block;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #333;
+    background: #161616;
+    box-shadow: 0 0 0 1px #262626, 0 0 10px rgba(0,115,255,0.06);
+    max-width: 100%;
+  }
+  .previewImg {
+    display: block;
+    max-width: min(100%, 520px);
+    max-height: 260px;
+    object-fit: cover;
+    object-position: center;
+  }
+  .previewRemove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(30,30,30,0.9);
+    color: #e7f0ff;
+    border: 1px solid #3b3b3b;
+    border-radius: 10px;
+    padding: 6px 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease, opacity 0.18s ease;
+  }
+  .previewRemove:hover {
+    background: #2a2a2a;
+    border-color: #4a4a4a;
+    transform: translateY(-1px);
+  }
+  
   /* ---------- Inputs ---------- */
   .input {
     width: 100%;
@@ -59,6 +134,37 @@
   .textarea {
     resize: vertical;
     line-height: 1.55;
+  }
+  
+  /* ---------- Range (brush size) --------- */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: #2a2a2a;
+    border-radius: 999px;
+    border: 1px solid #3a3a3a;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #0073ff;
+    border: 2px solid #e9f2ff;
+    cursor: pointer;
+    box-shadow: 0 0 0 2px rgba(0,115,255,0.25);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #0073ff;
+    border: 2px solid #e9f2ff;
+    cursor: pointer;
+    box-shadow: 0 0 0 2px rgba(0,115,255,0.25);
   }
   
   /* ---------- Suggestion bar ---------- */
@@ -163,7 +269,7 @@
   .primaryBtnSm:hover { background: #0063db; transform: translateY(-1px); }
   .primaryBtnSm:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,115,255,0.22); }
   
-  /* subtle secondary for discard */
+  /* subtle secondary for discard + toggles */
   .secondaryBtn {
     background: #262626;
     color: #e7f0ff;
@@ -176,6 +282,12 @@
   }
   .secondaryBtn:hover { background: #2e2e2e; border-color: #4a4a4a; transform: translateY(-1px); }
   .secondaryBtn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,115,255,0.22); }
+  /* pressed state for toggle buttons (e.g., Draw/Upload Mask) */
+  .secondaryBtn[aria-pressed="true"] {
+    background: #1c2940;
+    border-color: #365d9c;
+    box-shadow: inset 0 0 0 1px rgba(90,163,255,0.35);
+  }
   
   /* ---------- Magic button (refine/suggest) ---------- */
   .magicBtn {
@@ -208,6 +320,11 @@
   }
   .magicBtn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,115,255,0.22); }
   .magicBtn:active { transform: translateY(0); }
+  .magicBtn[aria-disabled="true"],
+  .magicBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
   
   /* ---------- Chat toggle ---------- */
   .chatToggleBtn {
@@ -237,7 +354,6 @@
     max-width: 560px;
   }
   
-  /* Input + send/stop */
   .chatPromptBar { position: relative; display: flex; align-items: center; gap: 0.4rem; }
   .chatPromptBar input {
     flex: 1;
@@ -275,7 +391,6 @@
   
   .chatThinking { margin-top: 4px; font-size: 0.8rem; color: #9fb8ff; }
   
-  /* Response box */
   .chatResponseBox {
     margin-top: 0.65rem;
     background: #1a1a1a;
@@ -296,7 +411,6 @@
     line-height: 1.5;
   }
   
-  /* Actions + tooltips */
   .chatActions {
     margin-top: 0.65rem;
     display: flex;
@@ -316,6 +430,12 @@
   }
   .chatIconBtn:hover { background: #2e2e2e; border-color: #4a4a4a; transform: translateY(-1px); }
   .chatIconBtn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,115,255,0.22); }
+  /* pressed state for toolbar toggles (brush/erase) */
+  .chatIconBtn[aria-pressed="true"] {
+    background: #1c2940;
+    border-color: #365d9c;
+    box-shadow: inset 0 0 0 1px rgba(90,163,255,0.35);
+  }
   
   .chatIconBtnPrimary {
     background: #0073ff;
@@ -351,7 +471,43 @@
   }
   .tooltipWrapper:hover::after { opacity: 1; }
   
-  /* ---------- Info (TTS-style) ---------- */
+  /* ---------- Refined preview box ---------- */
+  .refinePreview {
+    margin-top: 0.65rem;
+    background: #171717;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 0.75rem;
+    box-shadow: 0 0 0 1px #262626, 0 0 8px rgba(0,115,255,0.06);
+  }
+  .previewHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #dbe7ff;
+    font-weight: 400;
+    margin-bottom: 0.5rem;
+  }
+  .previewActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  
+  .infoMini {
+    margin-top: 0.4rem;
+    font-size: 0.85rem;
+    color: #bcd3ff;
+  }
+  
+  /* soft warning */
+  .softWarn {
+    margin-top: 0.35rem;
+    font-size: 0.82rem;
+    color: #ffce8a;
+  }
+  
+  /* ---------- Info (tips) ---------- */
   .infoBox {
     background: linear-gradient(145deg, #1d1d1d, #222);
     border: 1px solid #444;
@@ -403,51 +559,29 @@
     border: 2px solid rgba(255,255,255,0.35);
     border-top-color: #fff;
     border-radius: 50%;
-    animation: tti-spin 0.8s linear infinite;
+    animation: iti-spin 0.8s linear infinite;
     margin-right: 6px;
   }
-  @keyframes tti-spin { to { transform: rotate(360deg); } }
+  @keyframes iti-spin { to { transform: rotate(360deg); } }
   
-  .magicBtn[aria-disabled="true"],
-  .magicBtn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-  
-  /* refined preview box */
-  .refinePreview {
-    margin-top: 0.65rem;
-    background: #171717;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 0.75rem;
-    box-shadow: 0 0 0 1px #262626, 0 0 8px rgba(0,115,255,0.06);
-  }
-  .previewHeader {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: #dbe7ff;
-    font-weight: 400;
-    margin-bottom: 0.5rem;
-  }
-  .previewActions {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-  }
-  
-  .infoMini {
-    margin-top: 0.4rem;
-    font-size: 0.85rem;
-    color: #bcd3ff;
-  }
-  
-  /* soft warning */
-  .softWarn {
-    margin-top: 0.35rem;
-    font-size: 0.82rem;
-    color: #ffce8a;
+  /* In your CSS */
+  .hidden {
+    display: none !important;
+    }
+
+    /* optional if you ever swap to visibility-only hiding */
+  .inert {
+    pointer-events: none;
+    visibility: hidden;
+    }
+
+    /* Resizable draw frame (native textarea-like handle) */
+.resizableFrame {
+    /* Use horizontal to preserve image aspect; switch to 'both' if you want freeform height too */
+    resize: horizontal;               /* or: both */
+    min-width: var(--min-w, 320px);
+    max-width: var(--max-w, 900px);
+    /* overflow must not be 'visible' for resize to work; we already set inline overflow:hidden */
   }
   
   /* ---------- Responsive ---------- */
@@ -461,6 +595,7 @@
     .chatSendBtn { width: 42px; height: 42px; }
     .primaryBtn { width: 100%; justify-content: center; }
     .actionRow { justify-content: center; }
+    .previewImg { max-height: 220px; }
   }
   @media (max-width: 480px) {
     .sectionHeader { font-size: 0.92rem; }
@@ -469,6 +604,7 @@
     .chatPromptBar input { padding-right: 2.7rem; font-size: 0.9rem; }
     .chatSendBtn { width: 40px; height: 40px; right: 0.3rem; }
     .chatResponseBox { height: 150px; }
+    .previewImg { max-height: 200px; }
   }
   
   /* ---------- Motion/Accessibility ---------- */
@@ -477,5 +613,119 @@
     .sampleBtn:hover, .magicBtn:hover, .primaryBtn:hover, .chatIconBtn:hover, .chatIconBtnPrimary:hover {
       transform: none !important;
     }
+  }
+  
+  /* ===== Toolbar layout (keeps everything on one row) ===== */
+  .toolbarRow {
+    /* inherits display:flex from .actionRowLeft */
+    align-items: center;
+    flex-wrap: nowrap;                /* don't wrap on desktop */
+    column-gap: 0.6rem;
+    row-gap: 0;
+    min-width: 0;                     /* allow flex children to shrink */
+    overflow: hidden;                 /* prevent tiny overflow before wrap breakpoint */
+  }
+  .toolbarRow > * {
+    flex: 0 0 auto;                   /* keep items compact by default */
+    min-width: 0;                     /* allow shrinking without overflow */
+  }
+  
+  /* Allow wrapping gracefully on small screens */
+  @media (max-width: 800px) {
+    .toolbarRow {
+      flex-wrap: wrap;                /* wrap only on small screens */
+      row-gap: 0.5rem;
+      overflow: visible;
+    }
+  }
+  
+  /* Group for color chooser */
+  .colorGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-left: 0.5rem;
+    white-space: nowrap;              /* keeps "Color" + chips together */
+    flex: 0 1 auto;                   /* allow a bit of shrink if needed */
+    min-width: 0;
+  }
+  
+  .colorLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #a7b0bb;
+    font-size: 0.82rem;
+  }
+  
+  /* Make color chips compact */
+  .chip {
+    padding: 0.36rem 0.7rem;
+    font-size: 0.82rem;
+    line-height: 1;
+    border-radius: 999px;             /* pill look */
+  }
+  
+  /* Brush label + slider stay together and respect width */
+  .brushGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 0.75rem;
+    white-space: nowrap;              /* keeps label with slider */
+    flex: 1 1 auto;                   /* this group can take remaining space */
+    min-width: 0;                     /* allow slider to shrink gracefully */
+  }
+  
+  .brushLabel {
+    color: #a7b0bb;
+    font-size: 0.82rem;
+    flex: 0 0 auto;                   /* fixed next to slider */
+  }
+  
+  /* Slider sizing rules to avoid sticking out before wrapping */
+  .brushRange {
+    width: 160px;                     /* ideal width on desktop */
+    max-width: 220px;                 /* cap if there's extra space */
+    flex: 1 1 160px;                  /* shrink smoothly before wrap */
+    min-width: 120px;                 /* prevents the thumb from collapsing too much */
+    background-image:
+      linear-gradient(#0073ff, #0073ff),
+      linear-gradient(#2a2a2a, #2a2a2a);
+    background-size:
+      var(--fill, 0%) 100%,
+      100% 100%;
+    background-repeat: no-repeat;
+  }
+  
+  /* On narrow screens, let the slider stretch but keep the label next to it */
+  @media (max-width: 640px) {
+    .brushGroup { flex: 1 1 100%; }
+    .brushRange { width: 100%; min-width: 0; }
+  }
+  
+  /* ===== Accent refreshes (pressed/focus states) ===== */
+  .secondaryBtn[aria-pressed="true"],
+  .chatIconBtn[aria-pressed="true"] {
+    background: linear-gradient(180deg, #152137 0%, #0f1a2c 100%);
+    border-color: #3a69b7;
+    box-shadow:
+      inset 0 0 0 1px rgba(90,163,255,0.35),
+      0 0 0 2px rgba(0,115,255,0.12);
+  }
+  
+  /* Hover for chips: slightly brighter ring */
+  .chip:hover {
+    border-color: #4b7ad6;
+  }
+  
+  /* Range thumb focus ring for accessibility */
+  input[type="range"]:focus-visible::-webkit-slider-thumb {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(0,115,255,0.22);
+  }
+  input[type="range"]:focus-visible::-moz-range-thumb {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(0,115,255,0.22);
   }
   
