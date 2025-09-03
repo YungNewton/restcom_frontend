@@ -575,15 +575,6 @@
     visibility: hidden;
     }
 
-    /* Resizable draw frame (native textarea-like handle) */
-.resizableFrame {
-    /* Use horizontal to preserve image aspect; switch to 'both' if you want freeform height too */
-    resize: horizontal;               /* or: both */
-    min-width: var(--min-w, 320px);
-    max-width: var(--max-w, 900px);
-    /* overflow must not be 'visible' for resize to work; we already set inline overflow:hidden */
-  }
-  
   /* ---------- Responsive ---------- */
   @media (max-width: 1024px) {
     .wrap { max-width: 740px; }
@@ -623,7 +614,7 @@
     column-gap: 0.6rem;
     row-gap: 0;
     min-width: 0;                     /* allow flex children to shrink */
-    overflow: hidden;                 /* prevent tiny overflow before wrap breakpoint */
+    overflow: visible;                 /* prevent tiny overflow before wrap breakpoint */
   }
   .toolbarRow > * {
     flex: 0 0 auto;                   /* keep items compact by default */
@@ -729,3 +720,96 @@
     box-shadow: 0 0 0 4px rgba(0,115,255,0.22);
   }
   
+
+  /* ====== Inpaint: resizable drawing frame ====== */
+.resizableFrame {
+    /* you already set position/overflow/border inline; these are the
+       bits that make it resize like a textarea corner */
+    resize: horizontal;                 /* drag from right edge / bottom-right corner */
+    min-width: var(--min-w, 320px);
+    max-width: var(--max-w, 900px);
+    cursor: ew-resize;                  /* hint that it’s horizontally resizable */
+    /* Optional: soften flicker while resizing */
+    will-change: width;
+  }
+  
+  /* Little corner affordance (bottom-right) so users notice they can drag */
+  .resizableFrame::after {
+    content: "";
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    width: 12px;
+    height: 12px;
+    pointer-events: none;
+    background:
+      linear-gradient(135deg, transparent 0 6px, #3a3a3a 6px 8px, transparent 8px) no-repeat,
+      linear-gradient(135deg, transparent 0 10px, #555 10px 12px, transparent 12px) no-repeat;
+  }
+  
+  /* If you prefer a subtler indicator, dim it a bit on hover/focus within */
+  .resizableFrame:hover::after,
+  .resizableFrame:focus-within::after {
+    filter: brightness(1.2);
+  }
+  
+  /* ====== Tooltip quality-of-life tweaks (works with your existing markup) ====== */
+  .tooltipWrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100; /* ensure tooltips appear above the frame */
+  }
+  
+  .tooltipWrapper::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f1f1f;
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 200; /* higher than wrapper, so above everything nearby */
+  }
+  
+  /* Show on hover/focus */
+  .tooltipWrapper:hover::after,
+  .tooltipWrapper:focus-within::after {
+    opacity: 1;
+  }
+  
+  /* Optional: small arrow */
+  .tooltipWrapper::before {
+    content: '';
+    position: absolute;
+    bottom: 115%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent #1f1f1f transparent;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 200;
+  }
+  
+  .tooltipWrapper:hover::before,
+  .tooltipWrapper:focus-within::before {
+    opacity: 1;
+  }  
+  
+  /* On very small screens, avoid tooltip getting cut off */
+  @media (max-width: 480px) {
+    .tooltipWrapper::after {
+      bottom: 140%;
+      font-size: 0.72rem;
+    }
+  }  

@@ -84,10 +84,9 @@ export default function Inpaint({ engineOnline }: Props) {
   const promptWordCount = useMemo(() => countWords(prompt), [prompt])
   const negativeWordCount = useMemo(() => countWords(negative), [negative])
 
-  const DEFAULT_FRAME_WIDTH = 420;   // smaller initial view
-  const MIN_FRAME_WIDTH = 320;       // clamp
-  const MAX_FRAME_WIDTH = 900;       // clamp
-
+  const DEFAULT_FRAME_WIDTH = 420
+  const MIN_FRAME_WIDTH = 320
+  const MAX_FRAME_WIDTH = 900
 
   // --- utils ---
   function makeWsUrl(path: string) {
@@ -208,8 +207,8 @@ export default function Inpaint({ engineOnline }: Props) {
     setMaskFile(f)
     const url = URL.createObjectURL(f)
     setMaskPreview(url)
-    setUseCanvasMask(false) // stay on upload pane to show preview
-    setIsMaskDirty(false)   // uploaded file supersedes canvas
+    setUseCanvasMask(false)
+    setIsMaskDirty(false)
   }
 
   const clearRef = () => {
@@ -285,7 +284,6 @@ export default function Inpaint({ engineOnline }: Props) {
     return await new Promise<Blob | null>((resolve) => c.toBlob(b => resolve(b), 'image/png'))
   }
 
-  // Persist canvas → upload preview when switching to Upload Mask
   async function persistCanvasToUploadPreview() {
     if (!isMaskDirty || !canvasRef.current) return
     const blob = await exportCanvasMaskBlob()
@@ -297,14 +295,12 @@ export default function Inpaint({ engineOnline }: Props) {
     setMaskPreview(url)
   }
 
-  // Switch helpers (hide/show, not unmount)
   const switchToUploadMask = async () => {
     await persistCanvasToUploadPreview()
     setUseCanvasMask(false)
   }
   const switchToCanvasMask = () => {
     setUseCanvasMask(true)
-    // keep canvas content; optional: clear stale upload preview
     if (maskPreview?.startsWith('blob:')) URL.revokeObjectURL(maskPreview)
     setMaskFile(null)
     setMaskPreview(null)
@@ -375,7 +371,7 @@ export default function Inpaint({ engineOnline }: Props) {
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data)
-          if (msg.event === 'started') return
+        if (msg.event === 'started') return
           if (msg.token) { setNegative(prev => (prev || '') + msg.token); return }
           if (msg.done) { setIsSuggesting(false); return }
           if (msg.error) { toast.error(String(msg.error)); setIsSuggesting(false) }
@@ -487,7 +483,7 @@ export default function Inpaint({ engineOnline }: Props) {
       <div className={styles.section}>
         <div className={styles.labelRow}>
           <h3 className={styles.sectionHeader}>Mask</h3>
-          <div className={styles.actionGroupLeft} style={{ gap: '0.5rem' }}>
+        <div className={styles.actionGroupLeft} style={{ gap: '0.5rem' }}>
             <button
               type="button"
               className={styles.secondaryBtn}
@@ -519,30 +515,43 @@ export default function Inpaint({ engineOnline }: Props) {
             <>
               {/* TOOLBAR */}
               <div className={`${styles.actionRowLeft} ${styles.toolbarRow}`}>
-                <div className={styles.tooltipWrapper} data-tooltip="Brush">
+                {/* Brush */}
+                <div className={styles.tooltipWrapper} data-tooltip="Brush (B)">
                   <button
                     className={styles.chatIconBtn}
                     aria-pressed={mode === 'brush'}
                     onClick={() => setMode('brush')}
                     type="button"
+                    aria-label="Brush"
+                    title="Brush"
                   >
                     <Brush size={16} />
                   </button>
                 </div>
 
-                <div className={styles.tooltipWrapper} data-tooltip="Erase">
+                {/* Eraser */}
+                <div className={styles.tooltipWrapper} data-tooltip="Eraser (E)">
                   <button
                     className={styles.chatIconBtn}
                     aria-pressed={mode === 'erase'}
                     onClick={() => setMode('erase')}
                     type="button"
+                    aria-label="Eraser"
+                    title="Eraser"
                   >
                     <Eraser size={16} />
                   </button>
                 </div>
 
-                <div className={styles.tooltipWrapper} data-tooltip="Clear mask">
-                  <button className={styles.chatIconBtn} onClick={clearCanvas} type="button">
+                {/* Clear mask */}
+                <div className={styles.tooltipWrapper} data-tooltip="Clear mask (Reset strokes)">
+                  <button
+                    className={styles.chatIconBtn}
+                    onClick={clearCanvas}
+                    type="button"
+                    aria-label="Clear mask"
+                    title="Clear mask"
+                  >
                     <RotateCcw size={16} />
                   </button>
                 </div>
@@ -554,37 +563,52 @@ export default function Inpaint({ engineOnline }: Props) {
                     Color
                   </span>
                   <div className={styles.actionGroupLeft}>
-                    <button
-                      type="button"
-                      className={`${styles.secondaryBtn} ${styles.chip}`}
-                      aria-pressed={maskColor === 'black'}
-                      onClick={() => setMaskColor('black')}
-                    >
-                      Black
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.secondaryBtn} ${styles.chip}`}
-                      aria-pressed={maskColor === 'gray'}
-                      onClick={() => setMaskColor('gray')}
-                    >
-                      Gray
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.secondaryBtn} ${styles.chip}`}
-                      aria-pressed={maskColor === 'white'}
-                      onClick={() => setMaskColor('white')}
-                    >
-                      White
-                    </button>
+                    <div className={styles.tooltipWrapper} data-tooltip="Mask color: Black (keep)">
+                      <button
+                        type="button"
+                        className={`${styles.secondaryBtn} ${styles.chip}`}
+                        aria-pressed={maskColor === 'black'}
+                        onClick={() => setMaskColor('black')}
+                        aria-label="Mask color black"
+                        title="Mask color: Black (keep)"
+                      >
+                        Black
+                      </button>
+                    </div>
+
+                    <div className={styles.tooltipWrapper} data-tooltip="Mask color: Gray (soft)">
+                      <button
+                        type="button"
+                        className={`${styles.secondaryBtn} ${styles.chip}`}
+                        aria-pressed={maskColor === 'gray'}
+                        onClick={() => setMaskColor('gray')}
+                        aria-label="Mask color gray"
+                        title="Mask color: Gray (soft)"
+                      >
+                        Gray
+                      </button>
+                    </div>
+
+                    <div className={styles.tooltipWrapper} data-tooltip="Mask color: White (edit)">
+                      <button
+                        type="button"
+                        className={`${styles.secondaryBtn} ${styles.chip}`}
+                        aria-pressed={maskColor === 'white'}
+                        onClick={() => setMaskColor('white')}
+                        aria-label="Mask color white"
+                        title="Mask color: White (edit)"
+                      >
+                        White
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {/* Brush size */}
-                <div className={styles.brushGroup}>
-                  <label className={styles.brushLabel}>Brush: {brushSize}px</label>
+                <div className={`${styles.brushGroup} ${styles.tooltipWrapper}`} data-tooltip="Brush size">
+                  <label className={styles.brushLabel} htmlFor="brush-size">Brush: {brushSize}px</label>
                   <input
+                    id="brush-size"
                     className={styles.brushRange}
                     type="range"
                     min={2}
@@ -592,41 +616,42 @@ export default function Inpaint({ engineOnline }: Props) {
                     value={brushSize}
                     onChange={(e) => setBrushSize(parseInt(e.target.value, 10))}
                     style={{ ['--fill' as any]: `${((brushSize - 2) / (100 - 2)) * 100}%` }}
+                    aria-label="Brush size"
+                    title="Brush size"
                   />
                 </div>
               </div>
 
               <div
-            ref={drawFrameRef}
-            className={styles.resizableFrame} // <-- add this
-            style={{
-                position: 'relative',
-                marginTop: '0.5rem',
-                borderRadius: 12,
-                overflow: 'hidden',        // required: overflow != visible for CSS resize to work
-                border: '1px solid #333',
-                width: `${DEFAULT_FRAME_WIDTH}px`, // initial width (smaller)
-                maxWidth: '100%',                // don’t overflow the page on small screens
-                // pass min/max via CSS custom properties (the class uses these)
-                ['--min-w' as any]: `${MIN_FRAME_WIDTH}px`,
-                ['--max-w' as any]: `${MAX_FRAME_WIDTH}px`,
-            }}
-            >
-            {/* reference image under transparent canvas */}
-            <img
-                src={refPreview}
-                alt=""
-                style={{ display: 'block', width: '100%', userSelect: 'none', pointerEvents: 'none' }}
-            />
-            <canvas
-                ref={canvasRef}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: 'crosshair' }}
-                onMouseDown={handleCanvasDown}
-                onMouseMove={handleCanvasMove}
-                onMouseUp={handleCanvasUp}
-                onMouseLeave={handleCanvasUp}
-            />
-            </div>
+                ref={drawFrameRef}
+                className={styles.resizableFrame}
+                style={{
+                  position: 'relative',
+                  marginTop: '0.5rem',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  border: '1px solid #333',
+                  width: `${DEFAULT_FRAME_WIDTH}px`,
+                  maxWidth: '100%',
+                  ['--min-w' as any]: `${MIN_FRAME_WIDTH}px`,
+                  ['--max-w' as any]: `${MAX_FRAME_WIDTH}px`,
+                }}
+              >
+                {/* reference image under transparent canvas */}
+                <img
+                  src={refPreview}
+                  alt=""
+                  style={{ display: 'block', width: '100%', userSelect: 'none', pointerEvents: 'none' }}
+                />
+                <canvas
+                  ref={canvasRef}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: 'crosshair' }}
+                  onMouseDown={handleCanvasDown}
+                  onMouseMove={handleCanvasMove}
+                  onMouseUp={handleCanvasUp}
+                  onMouseLeave={handleCanvasUp}
+                />
+              </div>
 
               <div className={styles.infoMini} style={{ marginTop: '0.35rem' }}>
                 White - edit, Black - keep, Gray - soft edit. Use Erase to remove strokes.
@@ -694,6 +719,7 @@ export default function Inpaint({ engineOnline }: Props) {
               type="button"
               disabled={isRefining || !prompt.trim()}
               aria-disabled={isRefining || !prompt.trim()}
+              title={!prompt.trim() ? 'Enter a prompt first' : 'Refine with AI'}
             >
               {isRefining ? (<span className={styles.spinnerMini} />) : (<Sparkles size={16} />)}
               {isRefining ? 'Refining…' : 'Refine Prompt with AI'}
@@ -720,12 +746,13 @@ export default function Inpaint({ engineOnline }: Props) {
             <div className={styles.previewHeader}>
               <span>Refined preview</span>
               <div className={styles.previewActions}>
-                <button onClick={() => setRefinedDraft('')} className={styles.secondaryBtn}>
+                <button onClick={() => setRefinedDraft('')} className={styles.secondaryBtn} title="Discard refined text">
                   Discard
                 </button>
                 <button
                   onClick={() => { setPrompt(refinedDraft.trim()); setRefinedDraft('') }}
                   className={styles.primaryBtnSm}
+                  title="Apply refined text to Prompt"
                 >
                   Apply to Prompt
                 </button>
@@ -755,6 +782,8 @@ export default function Inpaint({ engineOnline }: Props) {
                     handleChatAsk()
                   }
                 }}
+                aria-label="Chat input"
+                title="Type your request and press Enter"
               />
               <button className={styles.chatSendBtn} onClick={handleChatAsk} type="button" title={isTyping ? 'Stop' : 'Send'}>
                 {isTyping ? <CircleStop size={18} /> : <Send size={18} />}
@@ -773,28 +802,32 @@ export default function Inpaint({ engineOnline }: Props) {
             </div>
 
             <div className={styles.chatActions}>
-              <div className={styles.left}>
-                <div className={styles.tooltipWrapper} data-tooltip="Regenerate">
+              <div className="left">
+                <div className={styles.tooltipWrapper} data-tooltip="Regenerate last answer">
                   <button
                     className={styles.chatIconBtn}
                     onClick={handleRegenerate}
                     disabled={isTyping || !lastPrompt}
+                    aria-label="Regenerate"
+                    title="Regenerate"
                   >
                     <RefreshCcw size={16} />
                   </button>
                 </div>
               </div>
-              <div className={styles.right}>
-                <div className={styles.tooltipWrapper} data-tooltip="Copy">
-                  <button className={styles.chatIconBtn} onClick={handleCopy}>
+              <div className="right">
+                <div className={styles.tooltipWrapper} data-tooltip="Copy to clipboard">
+                  <button className={styles.chatIconBtn} onClick={handleCopy} aria-label="Copy" title="Copy">
                     <Copy size={16} />
                   </button>
                 </div>
-                <div className={styles.tooltipWrapper} data-tooltip="Insert to Prompt">
+                <div className={styles.tooltipWrapper} data-tooltip="Insert into Prompt">
                   <button
                     className={styles.chatIconBtnPrimary}
                     onClick={handleApplyToPrompt}
                     disabled={!aiResponse.trim()}
+                    aria-label="Insert to Prompt"
+                    title="Insert to Prompt"
                   >
                     <CornerDownLeft size={16} />
                   </button>
@@ -838,7 +871,7 @@ export default function Inpaint({ engineOnline }: Props) {
             type="button"
             disabled={isSuggesting || !prompt.trim()}
             aria-disabled={isSuggesting || !prompt.trim()}
-            title={!prompt.trim() ? 'Enter a prompt first' : 'Suggest negatives'}
+            title={!prompt.trim() ? 'Enter a prompt first' : 'Suggest negatives with AI'}
           >
             {isSuggesting ? (<span className={styles.spinnerMini} />) : (<Sparkles size={16} />)}
             {isSuggesting ? 'Suggesting…' : 'Suggest with AI'}
@@ -873,12 +906,13 @@ export default function Inpaint({ engineOnline }: Props) {
             disabled={!prompt.trim() || !refFile}
             onClick={handleGenerate}
             aria-disabled={!prompt.trim() || !refFile}
+            title={!prompt.trim() || !refFile ? 'Upload an image and enter a prompt' : 'Generate inpaint'}
           >
             <Sparkles size={16} />
             Generate
           </button>
         ) : (
-          <button className={styles.primaryBtn} onClick={handleStartEngine} type="button">
+          <button className={styles.primaryBtn} onClick={handleStartEngine} type="button" title="Start image engine">
             Start Image Engine
           </button>
         )}
