@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
-import type { GeneralSettingsState } from '../Settings'
+import type { GeneralSettingsState } from '../Right/Settings/Settings'
 import {
   Sparkles, Info, ChevronDown, ChevronUp, CircleStop, Send, RefreshCcw, Copy, CornerDownLeft, Upload, Trash
 } from 'lucide-react'
@@ -80,13 +80,17 @@ export default function ImageToImage({ engineOnline }: Props) {
       const base = API_BASE_URL || window.location.origin
       const u = new URL(base)
       u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
-      u.pathname = path
+      // join without losing existing base path
+      const basePath = u.pathname.endsWith('/') ? u.pathname.slice(0, -1) : u.pathname
+      const relPath  = path.startsWith('/') ? path : `/${path}`
+      u.pathname = `${basePath}${relPath}`
       return u.toString()
     } catch {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      return `${proto}://${location.host}${path}`
+      const relPath = path.startsWith('/') ? path : `/${path}`
+      return `${proto}://${location.host}${relPath}`
     }
-  }
+  }  
 
   function openSocket(path: string, ref: React.MutableRefObject<WebSocket | null>): Promise<WebSocket> {
     return new Promise((resolve, reject) => {

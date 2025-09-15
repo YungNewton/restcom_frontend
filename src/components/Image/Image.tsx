@@ -1,31 +1,51 @@
-import { useEffect, useState } from 'react'
+// src/components/Image/Image.tsx
+import { useEffect, useRef, useState } from 'react'
 import NavTabs from '../NavTabs/NavTabs'
 import styles from './Image.module.css'
 import { toast } from 'react-hot-toast'
 import TextToImage from './TextToImage/TextToImage'
 import ImageToImage from './ImageToImage/ImageToImage'
 import Inpaint from './Inpaint/Inpaint'
-import GeneralSettings, { type GeneralSettingsState } from './Settings'
+import GeneralSettings, { type GeneralSettingsState } from './Right/Settings/Settings'
+import LoraLibrary from './Right/LoraLibrary/LoraLibrary'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
 
 type ActiveTab = 't2i' | 'i2i' | 'inpaint'
+type RightTab = 'settings' | 'loraLibrary'
 
 const Image = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('t2i')
   const [engineOnline, setEngineOnline] = useState(false)
 
+  // Track selected LoRAs from the right-side library (id + strength)
+  const [activeLoras, setActiveLoras] = useState<Array<{ id: string; strength: number }>>([])
+
+  // Right panel tabs (Settings | LoRA Library)
+  const [activeRightTab, setActiveRightTab] = useState<RightTab>('settings')
+  const tabsRef = {
+    settings: useRef<HTMLButtonElement>(null),
+    loraLibrary: useRef<HTMLButtonElement>(null),
+  }
+  const [indicatorLeft, setIndicatorLeft] = useState('0px')
+  const [indicatorWidth, setIndicatorWidth] = useState('0px')
+
+  useEffect(() => {
+    const ref = tabsRef[activeRightTab]
+    if (ref.current) {
+      setIndicatorLeft(ref.current.offsetLeft + 'px')
+      setIndicatorWidth(ref.current.offsetWidth + 'px')
+    }
+  }, [activeRightTab])
+
   // Shared settings used by all branches
   const [settings, setSettings] = useState<GeneralSettingsState>({
-    model: 'flux-schnell',
-    sampler: 'dpmpp_2m',
     width: 768,
     height: 1024,
     steps: 28,
     cfg: 4.0,
     batch: 1,
     seed: '',
-    loras: [{ id: 'restcom-style', name: 'Restcom Style', scale: 0.6 }],
   })
 
   useEffect(() => {
@@ -46,6 +66,13 @@ const Image = () => {
       setEngineOnline(false)
     }
     return () => es.close()
+  }, [])
+
+  // If we came from the main LoRA Library's "Use" button, open the LoRA tab
+  useEffect(() => {
+    if (sessionStorage.getItem('image.selectedLoras')) {
+      setActiveRightTab('loraLibrary')
+    }
   }, [])
 
   return (
@@ -87,24 +114,56 @@ const Image = () => {
             <TextToImage
               engineOnline={engineOnline}
               settings={settings}
+              // You can plumb activeLoras into generation payload here when ready
             />
           )}
           {activeTab === 'i2i' && (
             <ImageToImage
               engineOnline={engineOnline}
               settings={settings}
+              // Use activeLoras here as well if needed
             />
           )}
           {activeTab === 'inpaint' && (
             <Inpaint
               engineOnline={engineOnline}
               settings={settings}
+              // And here
             />
           )}
         </div>
 
         <div className={`${styles.right} ${styles.panel}`}>
-          <GeneralSettings value={settings} onChange={setSettings} />
+          {/* Right-side tabs: Settings | LoRA Library */}
+          <div className={styles.tabs}>
+            <button
+              ref={tabsRef.settings}
+              className={activeRightTab === 'settings' ? styles.active : ''}
+              onClick={() => setActiveRightTab('settings')}
+              type="button"
+            >
+              Settings
+            </button>
+            <button
+              ref={tabsRef.loraLibrary}
+              className={activeRightTab === 'loraLibrary' ? styles.active : ''}
+              onClick={() => setActiveRightTab('loraLibrary')}
+              type="button"
+            >
+              LoRA Library
+            </button>
+            <div
+              className={styles.tabIndicator}
+              style={{ left: indicatorLeft, width: indicatorWidth }}
+            />
+          </div>
+
+          {activeRightTab === 'settings' ? (
+            <GeneralSettings value={settings} onChange={setSettings} />
+          ) : (
+            // Pass selection callback so parent can use the chosen LoRAs
+            <LoraLibrary onSelectedChange={setActiveLoras} />
+          )}
         </div>
       </div>
     </div>
