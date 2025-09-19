@@ -1,8 +1,8 @@
-// src/components/TextToImage/TextToImage.tsx
+// src/components/Image/TextToImage/TextToImage.tsx
 import { useMemo, useRef, useState, useEffect } from 'react'
 import type { GeneralSettingsState } from '../Right/Settings/Settings'
 import {
-  Sparkles, Info, ChevronDown, ChevronUp, CircleStop, Send, RefreshCcw, Copy, CornerDownLeft
+  Sparkles, Info, ChevronDown, ChevronUp, CircleStop, Send, RefreshCcw, Copy, CornerDownLeft, Loader2
 } from 'lucide-react'
 import styles from './TextToImage.module.css'
 import { toast } from 'react-hot-toast'
@@ -12,12 +12,19 @@ import rehypeSanitize from 'rehype-sanitize'
 
 type Props = {
   engineOnline: boolean
-  settings?: GeneralSettingsState // optional for now (handleGenerate paused)
+  settings?: GeneralSettingsState
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+const ENGINE_BASE_URL = import.meta.env.VITE_VOICE_ENGINE_API_BASE_URL // used only for “Start Image Engine” call
 
-// --- WS endpoints (image-aligned) ---
+// ✅ Public task route (queues Celery job)
+const QUEUE_ROUTE = '/image/image/generate/'
+// ✅ Polling route (returns JSON states; on SUCCESS streams image bytes)
+const STATUS_ROUTE = (taskId: string) => `/image/image/task-status/${taskId}`
+const CANCEL_ROUTE = '/cancel-task/'
+
+// --- WS endpoints (unchanged) ---
 const WS_PATHS = {
   chat: '/ws/emails/generate-ai/',
   refine: '/ws/images/refine-prompt/',
@@ -40,27 +47,43 @@ const PROMPT_TEMPLATES = [
   "Editorial product lay-flat, soft gradient backdrop, diffused light."
 ]
 
-export default function TextToImage({ engineOnline }: Props) {
+// -------- Helpers ----------
+function normalizeBase(url?: string) {
+  if (!url) return ''
+  return url.replace(/\/+$/, '')
+}
+function revokeAll(urls: string[]) {
+  urls.forEach(u => { try { if (u.startsWith('blob:')) URL.revokeObjectURL(u) } catch {} })
+}
+
+export default function TextToImage({ engineOnline, settings }: Props) {
   const [prompt, setPrompt] = useState('')
   const [negative, setNegative] = useState('')
   const [showTips, setShowTips] = useState(false)
   const [showChat, setShowChat] = useState(false)
 
-  // mini-chat state (refinement chat)
+  // mini-chat state
   const [askInput, setAskInput] = useState('')
   const [aiResponse, setAiResponse] = useState('')
   const [isTyping, setIsTyping] = useState(false)
-  const [thinkingLabel, setThinkingLabel] = useState('') // decoupled from askInput
+  const [thinkingLabel, setThinkingLabel] = useState('')
   const dotsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [conversationHistory, setConversationHistory] = useState<any[]>([])
   const [lastPrompt, setLastPrompt] = useState('')
 
   const [isRefining, setIsRefining] = useState(false)
-  const [refinedDraft, setRefinedDraft] = useState('') // stream refined text here
+  const [refinedDraft, setRefinedDraft] = useState('')
 
   const [isSuggesting, setIsSuggesting] = useState(false)
 
-  // three dedicated sockets (chat / refine / negatives)
+  // 🟣 Generation state (polling + cancel UI)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [taskId, setTaskId] = useState<string | null>(null)
+  const [images, setImages] = useState<string[]>([])
+  const pollAbortRef = useRef<AbortController | null>(null)
+  const stopPollingRef = useRef(false)
+
+  // sockets
   const wsChatRef = useRef<WebSocket | null>(null)
   const wsRefineRef = useRef<WebSocket | null>(null)
   const wsNegRef = useRef<WebSocket | null>(null)
@@ -68,13 +91,154 @@ export default function TextToImage({ engineOnline }: Props) {
   const promptWordCount = useMemo(() => countWords(prompt), [prompt])
   const negativeWordCount = useMemo(() => countWords(negative), [negative])
 
-  // --- utils ---
+  useEffect(() => {
+    return () => {
+      try { wsChatRef.current?.close() } catch {}
+      try { wsRefineRef.current?.close() } catch {}
+      try { wsNegRef.current?.close() } catch {}
+      if (dotsTimerRef.current) clearInterval(dotsTimerRef.current)
+      try { pollAbortRef.current?.abort() } catch {}
+      revokeAll(images)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleStartEngine = async () => {
+    if (!API_BASE_URL) return
+    toast.loading('Starting Image Engine...')
+    try {
+      const res = await axios.post(`${ENGINE_BASE_URL}/image/start-runpod/`)
+      toast.dismiss()
+      const status = res.data.status
+      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(status)) toast.success('Image Engine is starting.')
+      else if (status === 'HEALTHY') toast.success('Image Engine is already live.')
+      else toast.error(`Engine status: ${status || 'Unknown'}`)
+    } catch {
+      toast.dismiss()
+      toast.error('Failed to start Image Engine.')
+    }
+  }
+
+  // ---------------- POLLING LOOP ----------------
+  const pollUntilDone = async (id: string) => {
+    stopPollingRef.current = false
+    let firstImageUrl: string | null = null
+
+    try {
+      while (!stopPollingRef.current) {
+        const controller = new AbortController()
+        pollAbortRef.current = controller
+
+        const url = `${normalizeBase(API_BASE_URL)}${STATUS_ROUTE(id)}`
+        const res = await fetch(url, { signal: controller.signal })
+
+        const ct = res.headers.get('content-type') || ''
+        if (res.ok && ct.startsWith('image/')) {
+          // SUCCESS: backend streamed the image
+          const blob = await res.blob()
+          firstImageUrl = URL.createObjectURL(blob)
+          setImages(prev => {
+            revokeAll(prev)
+            return [firstImageUrl!]
+          })
+          toast.success('Generated image')
+          break
+        }
+
+        // Otherwise, read JSON state
+        let data: any = null
+        try { data = await res.json() } catch { data = null }
+        const state = data?.state || data?.status || 'PENDING'
+
+        if (state === 'FAILURE') {
+          const msg = data?.error || 'Generation failed'
+          throw new Error(msg)
+        }
+
+        // PENDING / STARTED / RETRY → wait then poll again
+        await new Promise(r => setTimeout(r, 1500))
+      }
+    } finally {
+      pollAbortRef.current = null
+      setIsGenerating(false)
+      setTaskId(null)
+    }
+  }
+
+  // ---------------- QUEUE JOB + START POLLING ----------------
+  const handleGenerate = async () => {
+    if (!prompt.trim()) return
+    if (!engineOnline) return toast.error('Engine offline. Start it first.')
+    if (!ENGINE_BASE_URL) return toast.error('VITE_API_BASE_URL not set')
+
+    setIsGenerating(true)
+    revokeAll(images); setImages([])
+
+    const w = settings?.width ?? 768
+    const h = settings?.height ?? 1024
+    const steps = settings?.steps ?? 28
+    const cfg = settings?.cfg ?? 4.0
+    const seedStr = (settings?.seed ?? '').toString().trim()
+    const seed = seedStr === '' ? undefined : Number(seedStr)
+
+    const form = new FormData()
+    form.append('model', 'krea_dev') // ✅ backend expects: krea_dev | kontext | fill
+    form.append('prompt', prompt.trim())
+    form.append('negative_prompt', negative.trim())
+    form.append('width', String(w))
+    form.append('height', String(h))
+    form.append('guidance_scale', String(cfg))
+    form.append('num_inference_steps', String(steps))
+    if (Number.isFinite(seed as number)) form.append('seed', String(seed))
+    form.append('out_format', 'png')
+
+    try {
+      const res = await fetch(`${normalizeBase(ENGINE_BASE_URL)}${QUEUE_ROUTE}`, {
+        method: 'POST',
+        body: form,
+      })
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '')
+        throw new Error(txt || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      const id = data?.task_id
+      if (!id) throw new Error('No task_id returned')
+      setTaskId(id)
+      pollUntilDone(id)
+    } catch (e: any) {
+      setIsGenerating(false)
+      toast.error(e?.message || 'Failed to queue generation')
+    }
+  }
+
+  const handleCancelGenerate = async () => {
+      // tell the backend to kill the Celery task
+      if (taskId) {
+        const fd = new FormData()
+        fd.append('task_id', taskId)
+        try {
+          await fetch(`${normalizeBase(ENGINE_BASE_URL)}${CANCEL_ROUTE}`, {
+            method: 'POST',
+            body: fd,
+          })
+        } catch {}
+      }
+    
+      stopPollingRef.current = true
+      try { pollAbortRef.current?.abort() } catch {}
+      setIsGenerating(false)
+      setTaskId(null)
+      toast('Generation cancelled.')
+    }
+    
+
+  // --- WS helpers (unchanged) ---
   function makeWsUrl(path: string) {
     try {
       const base = API_BASE_URL || window.location.origin
       const u = new URL(base)
       u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
-      // join without losing existing base path
       const basePath = u.pathname.endsWith('/') ? u.pathname.slice(0, -1) : u.pathname
       const relPath  = path.startsWith('/') ? path : `/${path}`
       u.pathname = `${basePath}${relPath}`
@@ -84,278 +248,133 @@ export default function TextToImage({ engineOnline }: Props) {
       const relPath = path.startsWith('/') ? path : `/${path}`
       return `${proto}://${location.host}${relPath}`
     }
-  }  
+  }
 
   function openSocket(path: string, ref: React.MutableRefObject<WebSocket | null>): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
-      if (ref.current && ref.current.readyState === WebSocket.OPEN) {
-        return resolve(ref.current)
-      }
-      if (ref.current) {
-        try { ref.current.close() } catch {}
-      }
+      if (ref.current && ref.current.readyState === WebSocket.OPEN) return resolve(ref.current)
+      if (ref.current) { try { ref.current.close() } catch {} }
       const ws = new WebSocket(makeWsUrl(path))
       ref.current = ws
-
       ws.onopen = () => resolve(ws)
-      ws.onerror = (ev) => {
-        console.error('WebSocket error:', ev)
-        reject(new Error('WebSocket error'))
-      }
+      ws.onerror = (ev) => { console.error('WebSocket error:', ev); reject(new Error('WebSocket error')) }
     })
   }
 
-  // cleanup on unmount
-  useEffect(() => {
-    return () => {
-      try { wsChatRef.current?.close() } catch {}
-      try { wsRefineRef.current?.close() } catch {}
-      try { wsNegRef.current?.close() } catch {}
-      if (dotsTimerRef.current) clearInterval(dotsTimerRef.current)
-    }
-  }, [])
-
-  const handleStartEngine = async () => {
-    toast.loading('Starting Image Engine...')
-    try {
-      const res = await axios.post(`${API_BASE_URL}/image/start-runpod/`)
-      toast.dismiss()
-      const status = res.data.status
-      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(status)) toast.success('Image Engine is starting.')
-      else if (status === 'HEALTHY') toast.success('Image Engine is already live. Refresh if needed.')
-      else toast.error(`Engine status: ${status || 'Unknown'}`)
-    } catch (err) {
-      toast.dismiss()
-      toast.error('Failed to start Image Engine.')
-    }
-  }
-
-  const handleGenerate = () => {
-    if (!engineOnline || !prompt.trim()) return
-    // paused for now – wire later
-  }
-
-  // --- WS: Refine Prompt (streams into refinedDraft) ---
+  // --- Refine Prompt (streams to refinedDraft) ---
   const handleRefinePrompt = async () => {
     if (!prompt.trim() || isRefining) return
-    setIsRefining(true)
-    setRefinedDraft('')
-
+    setIsRefining(true); setRefinedDraft('')
     try {
       const ws = await openSocket(WS_PATHS.refine, wsRefineRef)
-
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data)
           if (msg.event === 'started') return
-          if (msg.token) {
-            setRefinedDraft(prev => (prev || '') + msg.token)
-            return
-          }
-          if (msg.done) {
-            setIsRefining(false)
-            return
-          }
-          if (msg.error) {
-            toast.error(String(msg.error))
-            setIsRefining(false)
-          }
+          if (msg.token) { setRefinedDraft(prev => (prev || '') + msg.token); return }
+          if (msg.done) { setIsRefining(false); return }
+          if (msg.error) { toast.error(String(msg.error)); setIsRefining(false) }
         } catch {
           setRefinedDraft(prev => (prev || '') + String(e.data || ''))
         }
       }
-
-      ws.onclose = () => {
-        if (isRefining) setIsRefining(false)
-      }
-
+      ws.onclose = () => { if (isRefining) setIsRefining(false) }
       const payload = { prompt }
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(payload))
-      } else {
-        ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
-      }
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
+      else ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
     } catch (err: any) {
-      toast.error(err?.message || 'Refine failed')
-      setIsRefining(false)
+      toast.error(err?.message || 'Refine failed'); setIsRefining(false)
     }
   }
 
-  // --- WS: Suggest Negatives (streams into negative) ---
+  // --- Suggest Negatives (streams to negative) ---
   const handleSuggestWithAI = async () => {
     if (!prompt.trim() || isSuggesting) return
-    setIsSuggesting(true)
-    setNegative('')
-
+    setIsSuggesting(true); setNegative('')
     try {
       const ws = await openSocket(WS_PATHS.negatives, wsNegRef)
-
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data)
           if (msg.event === 'started') return
-          if (msg.token) {
-            setNegative(prev => (prev || '') + msg.token)
-            return
-          }
-          if (msg.done) {
-            setIsSuggesting(false)
-            return
-          }
-          if (msg.error) {
-            toast.error(String(msg.error))
-            setIsSuggesting(false)
-          }
+          if (msg.token) { setNegative(prev => (prev || '') + msg.token); return }
+          if (msg.done) { setIsSuggesting(false); return }
+          if (msg.error) { toast.error(String(msg.error)); setIsSuggesting(false) }
         } catch {
           setNegative(prev => (prev || '') + String(e.data || ''))
         }
       }
-
-      ws.onclose = () => {
-        if (isSuggesting) setIsSuggesting(false)
-      }
-
+      ws.onclose = () => { if (isSuggesting) setIsSuggesting(false) }
       const payload = { prompt }
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(payload))
-      } else {
-        ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
-      }
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
+      else ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
     } catch (err: any) {
-      toast.error(err?.message || 'Suggestion failed')
-      setIsSuggesting(false)
+      toast.error(err?.message || 'Suggestion failed'); setIsSuggesting(false)
     }
   }
 
-  // ——— Chat: WS (decouple thinking label from input) ———
+  // ——— Chat WS ———
   const startThinkingAnimation = () => {
     let i = 0
     setThinkingLabel('AI is thinking')
     dotsTimerRef.current = setInterval(() => {
       const dots = ['.', '..', '...']
-      setThinkingLabel(`AI is thinking${dots[i % dots.length]}`)
-      i++
+      setThinkingLabel(`AI is thinking${dots[i % dots.length]}`); i++
     }, 500)
   }
   const stopThinkingAnimation = () => {
-    if (dotsTimerRef.current) {
-      clearInterval(dotsTimerRef.current)
-      dotsTimerRef.current = null
-    }
+    if (dotsTimerRef.current) { clearInterval(dotsTimerRef.current); dotsTimerRef.current = null }
     setThinkingLabel('')
   }
-
   const sendChatPrompt = async (text: string) => {
-    if (isTyping) {
-      try { wsChatRef.current?.close(4001, 'client cancel') } catch {}
-      return
-    }
+    if (isTyping) { try { wsChatRef.current?.close(4001, 'client cancel') } catch {}; return }
     if (!text.trim()) return
-
-    setAiResponse('')
-    setIsTyping(true)
-    setLastPrompt(text)
-    startThinkingAnimation()
-
+    setAiResponse(''); setIsTyping(true); setLastPrompt(text); startThinkingAnimation()
     let full = ''
-
     try {
       const ws = await openSocket(WS_PATHS.chat, wsChatRef)
-
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data)
           if (msg.event === 'started') return
-
-          if (msg.token) {
-            full += msg.token
-            setAiResponse(prev => prev + msg.token)
-            return
-          }
+          if (msg.token) { full += msg.token; setAiResponse(prev => prev + msg.token); return }
           if (msg.done) {
-            setIsTyping(false)
-            stopThinkingAnimation()
-            setConversationHistory(prev => [
-              ...prev,
-              { role: 'user', content: text },
-              { role: 'assistant', content: full },
-            ])
+            setIsTyping(false); stopThinkingAnimation()
+            setConversationHistory(prev => [...prev, { role: 'user', content: text }, { role: 'assistant', content: full }])
             return
           }
-          if (msg.error) {
-            setIsTyping(false)
-            stopThinkingAnimation()
-            toast.error(String(msg.error))
-          }
+          if (msg.error) { setIsTyping(false); stopThinkingAnimation(); toast.error(String(msg.error)) }
         } catch {
-          const s = String(e.data || '')
-          full += s
-          setAiResponse(prev => prev + s)
+          const s = String(e.data || ''); full += s; setAiResponse(prev => prev + s)
         }
       }
-
-      ws.onerror = () => {
-        setIsTyping(false)
-        stopThinkingAnimation()
-        toast.error('WebSocket error')
-      }
-
-      ws.onclose = () => {
-        if (isTyping) {
-          setIsTyping(false)
-          stopThinkingAnimation()
-        }
-      }
-
-      const payload = {
-        prompt: text,
-        history: conversationHistory || [],
-      }
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(payload))
-      } else {
-        ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
-      }
+      ws.onerror = () => { setIsTyping(false); stopThinkingAnimation(); toast.error('WebSocket error') }
+      ws.onclose = () => { if (isTyping) { setIsTyping(false); stopThinkingAnimation() } }
+      const payload = { prompt: text, history: conversationHistory || [] }
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
+      else ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
     } catch (e: any) {
-      setIsTyping(false)
-      stopThinkingAnimation()
-      toast.error(e?.message || 'Failed to start chat')
+      setIsTyping(false); stopThinkingAnimation(); toast.error(e?.message || 'Failed to start chat')
     }
   }
-
   const handleChatAsk = () => {
-    if (isTyping) {
-      try { wsChatRef.current?.close(4001, 'client cancel') } catch {}
-      return
-    }
-    const text = askInput.trim()
-    if (!text) return
-  
-    setAskInput('')
-    sendChatPrompt(text)
+    if (isTyping) { try { wsChatRef.current?.close(4001, 'client cancel') } catch {}; return }
+    const text = askInput.trim(); if (!text) return
+    setAskInput(''); sendChatPrompt(text)
   }
-
   const handleRegenerate = () => {
     if (!lastPrompt || isTyping) return
     sendChatPrompt(lastPrompt)
   }
-
   const handleCopy = async () => {
     if (!aiResponse) return
-    try {
-      await navigator.clipboard.writeText(aiResponse)
-      toast.success('Copied')
-    } catch {
-      toast.error('Copy failed')
-    }
+    try { await navigator.clipboard.writeText(aiResponse); toast.success('Copied') }
+    catch { toast.error('Copy failed') }
   }
-
   const handleApplyToPrompt = () => {
     if (!aiResponse.trim()) return
-    setPrompt(aiResponse.trim())
-    toast.success('Inserted into Prompt')
+    setPrompt(aiResponse.trim()); toast.success('Inserted into Prompt')
   }
-
   const applyTemplate = (t: string) => setPrompt(t)
 
   const CHAR_SOFT_LIMIT = 1000
@@ -420,7 +439,7 @@ export default function TextToImage({ engineOnline }: Props) {
           <div />
         </div>
 
-        {/* Refined preview (apply/discard) */}
+        {/* Refined preview */}
         {!!refinedDraft && !isRefining && (
           <div className={styles.refinePreview}>
             <div className={styles.previewHeader}>
@@ -437,19 +456,13 @@ export default function TextToImage({ engineOnline }: Props) {
                 </button>
               </div>
             </div>
-            <textarea
-              className={`${styles.input} ${styles.textarea}`}
-              value={refinedDraft}
-              readOnly
-              rows={4}
-            />
+            <textarea className={`${styles.input} ${styles.textarea}`} value={refinedDraft} readOnly rows={4} />
           </div>
         )}
 
         {/* Collapsible Chat Panel */}
         {showChat && (
           <div id="promptChatPanel" className={styles.chatCard}>
-            {/* Input + Send/Stop */}
             <div className={styles.chatPromptBar}>
               <input
                 type="text"
@@ -467,11 +480,8 @@ export default function TextToImage({ engineOnline }: Props) {
                 {isTyping ? <CircleStop size={18} /> : <Send size={18} />}
               </button>
             </div>
-            {isTyping && thinkingLabel && (
-              <div className={styles.chatThinking}>{thinkingLabel}</div>
-            )}
+            {isTyping && thinkingLabel && <div className={styles.chatThinking}>{thinkingLabel}</div>}
 
-            {/* Response box */}
             <div className={styles.chatResponseBox}>
               <div className={styles.chatResponseText} aria-live="polite">
                 <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
@@ -480,15 +490,10 @@ export default function TextToImage({ engineOnline }: Props) {
               </div>
             </div>
 
-            {/* Actions */}
             <div className={styles.chatActions}>
               <div className={styles.left}>
                 <div className={styles.tooltipWrapper} data-tooltip="Regenerate">
-                  <button
-                    className={styles.chatIconBtn}
-                    onClick={handleRegenerate}
-                    disabled={isTyping || !lastPrompt}
-                  >
+                  <button className={styles.chatIconBtn} onClick={handleRegenerate} disabled={isTyping || !lastPrompt}>
                     <RefreshCcw size={16} />
                   </button>
                 </div>
@@ -500,11 +505,7 @@ export default function TextToImage({ engineOnline }: Props) {
                   </button>
                 </div>
                 <div className={styles.tooltipWrapper} data-tooltip="Insert to Prompt">
-                  <button
-                    className={styles.chatIconBtnPrimary}
-                    onClick={handleApplyToPrompt}
-                    disabled={!aiResponse.trim()}
-                  >
+                  <button className={styles.chatIconBtnPrimary} onClick={handleApplyToPrompt} disabled={!aiResponse.trim()}>
                     <CornerDownLeft size={16} />
                   </button>
                 </div>
@@ -513,7 +514,7 @@ export default function TextToImage({ engineOnline }: Props) {
           </div>
         )}
 
-        {/* Suggestion cards */}
+        {/* Suggestions */}
         <div className={styles.sampleBar}>
           {PROMPT_TEMPLATES.map((p, idx) => (
             <button key={idx} className={styles.sampleBtn} title={p} onClick={() => applyTemplate(p)}>
@@ -527,11 +528,10 @@ export default function TextToImage({ engineOnline }: Props) {
       <div className={styles.section}>
         <div className={styles.labelRow}>
           <h3 className={styles.sectionHeader}>Negative Prompt</h3>
-          <span className={styles.counter} aria-live="polite">
+        <span className={styles.counter} aria-live="polite">
             {negativeWordCount} words
           </span>
         </div>
-
         <textarea
           className={`${styles.input} ${styles.textarea}`}
           placeholder="Things to avoid (e.g., blur, extra fingers, text)…"
@@ -539,7 +539,6 @@ export default function TextToImage({ engineOnline }: Props) {
           onChange={(e) => setNegative(e.target.value)}
           rows={4}
         />
-
         <div className={styles.actionRowLeft}>
           <button
             className={styles.magicBtn}
@@ -555,7 +554,7 @@ export default function TextToImage({ engineOnline }: Props) {
         </div>
       </div>
 
-      {/* Tips (collapsible) */}
+      {/* Tips */}
       <div className={styles.infoBox}>
         <div className={styles.infoHeader} onClick={() => setShowTips(!showTips)}>
           <Info size={20} />
@@ -577,21 +576,44 @@ export default function TextToImage({ engineOnline }: Props) {
       {/* Generate / Start */}
       <div className={styles.actionRow}>
         {engineOnline ? (
-          <button
-            className={styles.primaryBtn}
-            disabled={!prompt.trim()}
-            onClick={handleGenerate}
-            aria-disabled={!prompt.trim()}
-          >
-            <Sparkles size={16} />
-            Generate
-          </button>
+          <>
+            <button
+              className={styles.primaryBtn}
+              disabled={!prompt.trim() || isGenerating}
+              onClick={handleGenerate}
+              aria-disabled={!prompt.trim() || isGenerating}
+            >
+              {isGenerating ? <Loader2 className={styles.spinner} /> : <Sparkles size={16} />}
+              {isGenerating ? 'Generating…' : 'Generate'}
+            </button>
+            {isGenerating && (
+              <button className={styles.secondaryBtn} onClick={handleCancelGenerate} type="button">
+                <CircleStop size={16} />
+                Cancel
+              </button>
+            )}
+          </>
         ) : (
           <button className={styles.primaryBtn} onClick={handleStartEngine} type="button">
             Start Image Engine
           </button>
         )}
       </div>
+
+      {/* Results */}
+      {images.length > 0 && (
+        <div className={styles.section}>
+          <h3 className={styles.sectionHeader}>Results</h3>
+          <div className={styles.gallery}>
+            {images.map((src, i) => (
+              <div className={styles.thumb} key={i}>
+                <img src={src} alt={`Generated ${i + 1}`} />
+                <a className={styles.downloadLink} href={src} download={`krea_${i + 1}.png`}>Download</a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

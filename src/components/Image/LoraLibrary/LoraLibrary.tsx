@@ -2,9 +2,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import styles from './LoraLibrary.module.css'
 import {
-  Search, Star, StarOff, Plus, Upload, Link as LinkIcon, X, Pencil, Trash2,
+  Search, Star, StarOff, Plus, X, Pencil, Trash2,
   Download, RefreshCcw, Grid, List, Info, ChevronLeft, ChevronRight
 } from 'lucide-react'
+import AddLoRa from './AddLoRa'
 
 /** LoRA shape coming from backend */
 export type Lora = {
@@ -838,9 +839,9 @@ export default function LoraLibrary({
         </div>
       )}
 
-      {/* Add Modal */}
+      {/* Add Modal (external component) */}
       {addOpen && (
-        <AddModal
+        <AddLoRa
           onClose={() => setAddOpen(false)}
           onSubmit={async payload => {
             await onAdd?.(payload)
@@ -869,175 +870,4 @@ function promptRename(
   const next = window.prompt('Rename LoRA', l.name)
   if (next == null) return
   onRename(l.id, next.trim() || l.name)
-}
-
-function AddModal({
-  onClose,
-  onSubmit
-}: {
-  onClose: () => void
-  onSubmit: (payload: {
-    name: string
-    type: NonNullable<Lora['type']>
-    file?: File
-    url?: string
-    tags: string[]
-  }) => void | Promise<void>
-}) {
-  const [tab, setTab] = useState<'upload' | 'link'>('upload')
-  const [name, setName] = useState('')
-  const [type, setType] = useState<NonNullable<Lora['type']>>('image')
-  const [file, setFile] = useState<File | undefined>()
-  const [url, setUrl] = useState('')
-  const [tagInput, setTagInput] = useState('')
-  const [tags, setTags] = useState<string[]>([])
-  const [submitting, setSubmitting] = useState(false)
-
-  function addTag(v: string) {
-    const t = v.trim()
-    if (!t) return
-    if (tags.includes(t)) return
-    setTags(prev => [...prev, t])
-    setTagInput('')
-  }
-
-  function removeTag(t: string) {
-    setTags(prev => prev.filter(x => x !== t))
-  }
-
-  async function submit() {
-    if (!name.trim()) return
-    if (tab === 'upload' && !file) return
-    if (tab === 'link' && !url.trim()) return
-    setSubmitting(true)
-    try {
-      await onSubmit({
-        name: name.trim(),
-        type,
-        file,
-        url: tab === 'link' ? url.trim() : undefined,
-        tags
-      })
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div className={styles.modalBackdrop} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className={styles.modalHeader}>
-          <h3 className={styles.modalTitle}>Add a new LoRA</h3>
-          <button className={styles.iconBtn} onClick={onClose} aria-label="Close" type="button">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className={styles.modalBody}>
-          <label className={styles.label}>Name</label>
-          <input
-            className={styles.input}
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="e.g., Realistic Portrait v3"
-          />
-
-        <label className={styles.label}>Type</label>
-          <div className={styles.typeRow}>
-            {(['image', 'video', 'audio', 'text'] as const).map(t => (
-              <button
-                key={t}
-                className={cn(styles.typeBtn, type === t && styles.typeBtnActive)}
-                onClick={() => setType(t)}
-                type="button"
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-
-          <div className={styles.tabSwitcher}>
-            <button
-              className={cn(styles.tabBtn, tab === 'upload' && styles.tabBtnActive)}
-              onClick={() => setTab('upload')}
-              type="button"
-            >
-              <Upload size={16}/> Upload
-            </button>
-            <button
-              className={cn(styles.tabBtn, tab === 'link' && styles.tabBtnActive)}
-              onClick={() => setTab('link')}
-              type="button"
-            >
-              <LinkIcon size={16}/> From URL
-            </button>
-          </div>
-
-          {tab === 'upload' ? (
-            <div className={styles.field}>
-              <label className={styles.label}>File</label>
-              <input
-                className={styles.input}
-                type="file"
-                onChange={e => setFile(e.target.files?.[0] || undefined)}
-              />
-              <div className={styles.muted}>Accepted: .safetensors, .pt, .bin, etc.</div>
-            </div>
-          ) : (
-            <div className={styles.field}>
-              <label className={styles.label}>URL</label>
-              <input
-                className={styles.input}
-                placeholder="https://…"
-                value={url}
-                onChange={e => setUrl(e.target.value)}
-              />
-            </div>
-          )}
-
-          <div className={styles.field}>
-            <label className={styles.label}>Tags</label>
-            <div className={styles.tagAdder}>
-              <input
-                className={styles.input}
-                placeholder="portrait, anime, indoor…"
-                value={tagInput}
-                onChange={e => setTagInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    addTag(tagInput)
-                  }
-                }}
-              />
-              <button className={styles.secondaryBtn} onClick={() => addTag(tagInput)} type="button">
-                Add
-              </button>
-            </div>
-            <div className={styles.tagsRow}>
-              {tags.map(t => (
-                <span key={t} className={styles.tagChip} onClick={() => removeTag(t)}>
-                  #{t}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.modalFooter}>
-          <button className={styles.secondaryBtn} onClick={onClose} type="button">
-            Cancel
-          </button>
-          <button
-            className={styles.primaryBtn}
-            onClick={submit}
-            disabled={submitting || !name.trim() || (tab === 'upload' ? !file : !url.trim())}
-            type="button"
-          >
-            {submitting ? 'Adding…' : 'Add LoRA'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 }

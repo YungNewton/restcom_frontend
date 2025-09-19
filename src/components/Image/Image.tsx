@@ -13,6 +13,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL
 
 type ActiveTab = 't2i' | 'i2i' | 'inpaint'
 type RightTab = 'settings' | 'loraLibrary'
+const MAX_SELECTED = 3
 
 const Image = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('t2i')
@@ -20,6 +21,7 @@ const Image = () => {
 
   // Track selected LoRAs from the right-side library (id + strength)
   const [activeLoras, setActiveLoras] = useState<Array<{ id: string; strength: number }>>([])
+  const selectedLoraCount = activeLoras.length
 
   // Right panel tabs (Settings | LoRA Library)
   const [activeRightTab, setActiveRightTab] = useState<RightTab>('settings')
@@ -114,21 +116,21 @@ const Image = () => {
             <TextToImage
               engineOnline={engineOnline}
               settings={settings}
-              // You can plumb activeLoras into generation payload here when ready
+              // TODO: plumb activeLoras into generation payload when ready
             />
           )}
           {activeTab === 'i2i' && (
             <ImageToImage
               engineOnline={engineOnline}
               settings={settings}
-              // Use activeLoras here as well if needed
+              // TODO: use activeLoras here
             />
           )}
           {activeTab === 'inpaint' && (
             <Inpaint
               engineOnline={engineOnline}
               settings={settings}
-              // And here
+              // TODO: use activeLoras here
             />
           )}
         </div>
@@ -150,7 +152,7 @@ const Image = () => {
               onClick={() => setActiveRightTab('loraLibrary')}
               type="button"
             >
-              LoRA Library
+              LoRA Library{selectedLoraCount > 0 ? ` (${selectedLoraCount}/${MAX_SELECTED})` : ''}
             </button>
             <div
               className={styles.tabIndicator}
@@ -161,7 +163,7 @@ const Image = () => {
           {activeRightTab === 'settings' ? (
             <GeneralSettings value={settings} onChange={setSettings} />
           ) : (
-            // Pass selection callback so parent can use the chosen LoRAs
+            // Capture selection changes from the right-side LoRA Library
             <LoraLibrary onSelectedChange={setActiveLoras} />
           )}
         </div>

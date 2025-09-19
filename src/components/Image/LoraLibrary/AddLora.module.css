@@ -1,0 +1,328 @@
+:root {
+    --panel-bg: #151515;
+    --panel-border: #333;
+  
+    --btn-h: 34px;
+    --btn-font-size: 0.85rem;
+    --control-h: 40px;
+  
+    --danger-bg: #2a1212;
+    --danger-border: #5a2222;
+    --danger-ring: rgba(255, 86, 86, 0.28);
+  }
+  
+  .modalBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    display: grid;
+    place-items: center;
+    z-index: 50;
+  }
+  .modal {
+    background: #121212;
+    border: 1px solid #333;
+    border-radius: 16px;
+    padding: 0.9rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    inline-size: 720px;
+    max-inline-size: 96vw;
+    max-block-size: 92vh;
+    overflow: auto;
+  }
+  .modalHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .modalTitle {
+    margin: 0;
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
+  .iconBtn {
+    inline-size: 34px;
+    block-size: 34px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    line-height: 0;
+    padding: 0;
+    background: #262626;
+    color: #e7f0ff;
+    border: 1px solid #3b3b3b;
+  }
+  .iconBtn:hover,
+  .iconBtn:focus-visible {
+    background: #303030;
+    border-color: #4a4a4a;
+  }
+  .modalBody {
+    margin-top: 0.6rem;
+    display: grid;
+    gap: 0.75rem;
+  }
+  
+  .label {
+    color: #dfe7f3;
+    font-size: 0.85rem;
+  }
+  .input {
+    inline-size: 100%;
+    background: #1f1f1f;
+    color: #e8edf6;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    padding: 0 0.85rem;
+    font-size: 0.95rem;
+    height: var(--control-h);
+  }
+  
+  /* Tabs */
+  .tabSwitcher {
+    display: inline-flex;
+    gap: 0.35rem;
+  }
+  .tabBtn {
+    background: #101010;
+    color: #d7e7ff;
+    border: 1px solid #274a7a;
+    border-radius: 10px;
+    padding: 0.42rem 0.7rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    line-height: 1;
+    white-space: nowrap;
+    font-size: 0.85rem;
+  }
+  .tabBtnActive {
+    background: #162033;
+    border-color: #3b6db2;
+  }
+  
+  /* Tags */
+  .tagAdder {
+    display: flex;
+    gap: 0.4rem;
+    align-items: stretch;
+  }
+  .tagInput { height: var(--control-h); }
+  .tagAddBtn {
+    height: var(--control-h);
+    padding: 0 0.9rem;
+  }
+  .tagsRow {
+    margin-top: 0.35rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .tagChip {
+    background: #1f1f1f;
+    border: 1px solid #333;
+    color: #cfd8e3;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  
+  /* Buttons — equal sizing for primary & secondary */
+  .primaryBtn,
+  .secondaryBtn {
+    height: var(--btn-h);
+    padding: 0 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    line-height: 1;
+    white-space: nowrap;
+    font-size: var(--btn-font-size);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .primaryBtn {
+    background: #0073ff;
+    color: #fff;
+    border: none;
+    font-weight: 600;
+  }
+  .primaryBtn:hover { background: #005ed9; }
+  .secondaryBtn {
+    background: #262626;
+    color: #e7f0ff;
+    border: 1px solid #3b3b3b;
+  }
+  .secondaryBtn:hover {
+    background: #303030;
+    border-color: #4a4a4a;
+    color: #f2f6ff;
+  }
+  .modalFooter {
+    margin-top: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
+  
+  .muted { color: #9aa5b1; font-size: 0.8rem; }
+  .subText { color: #7c8796; font-size: 0.78rem; }
+  
+  /* Upload: single model */
+  .uploadArea { display: grid; gap: 0.6rem; }
+  .uploadBox {
+    border: 1px dashed #444;
+    border-radius: 12px;
+    padding: 1.1rem;
+    text-align: center;
+    background: #1b1b1b;
+    transition: background .2s ease, border-color .2s ease;
+    cursor: pointer;
+  }
+  .uploadBox:hover { background: #222; border-color: #555; }
+  .uploadInner {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 0.35rem;
+    min-block-size: 120px;
+    color: #dfe7f3;
+  }
+  .uploadInner svg { display: block; }
+  
+  /* File card list */
+  .fileCardList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .fileCard {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #1d1d1d;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 0.55rem 0.75rem;
+    gap: 0.8rem;
+  }
+  .fileInfo { min-width: 0; }
+  .fileName {
+    color: #e9eef7;
+    font-size: 0.92rem;
+    font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-inline-size: 420px;
+  }
+  .fileMeta { color: #9aa5b1; font-size: 0.78rem; }
+  
+  /* Train */
+  .trainGrid { display: grid; gap: 0.6rem; }
+  .field { display: grid; gap: 0.3rem; }
+  .twoCol {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  @media (max-width: 560px) {
+    .twoCol { grid-template-columns: 1fr; }
+  }
+  
+  /* Train drop zone — clickable label, perfectly centered icon + text */
+  .dropZone {
+    border: 1px dashed #3a3a3a;
+    border-radius: 12px;
+    padding: 1rem;
+    background: #141414;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    cursor: pointer;
+  }
+  .dropInner {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 0.35rem;
+    min-block-size: 140px;
+    color: #dfe7f3;
+  }
+  .dropInner svg { display: block; }
+  
+  .trainHeader {
+    margin-top: 0.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6rem;
+    color: #c9d3e0;
+    font-size: .9rem;
+  }
+  
+  .trainList {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+  }
+  @media (min-width: 800px) {
+    .trainList { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  .trainItem {
+    background: #151515;
+    border: 1px solid #2c2c2c;
+    border-radius: 12px;
+    padding: 0.6rem;
+    display: grid;
+    grid-template-rows: auto auto auto auto;
+    gap: 0.45rem;
+  }
+  .trainThumb {
+    inline-size: 100%;
+    aspect-ratio: 4/3;
+    object-fit: cover;
+    border-radius: 8px;
+    background: #111;
+  }
+  .trainMetaRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .6rem;
+  }
+  .trainFilename {
+    color: #dfe7f3;
+    font-size: 0.86rem;
+    font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-inline-size: 70%;
+  }
+  .trainFilesize { color: #9aa5b1; font-size: 0.78rem; }
+  .trainCaption {
+    background: #1f1f1f;
+    color: #e8edf6;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 0 0.65rem;
+    font-size: 0.9rem;
+    height: 36px;
+    inline-size: 100%;
+  }
+  
+  .estimateRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .6rem;
+    padding-top: 0.2rem;
+    border-top: 1px dashed #2c2c2c;
+  }
+  .stepsValue { color: #fff; font-weight: 600; }
+  
