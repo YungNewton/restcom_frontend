@@ -2,18 +2,35 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import type { GeneralSettingsState } from '../Right/Settings/Settings'
 import {
-  Sparkles, Info, ChevronDown, ChevronUp, CircleStop, Send, RefreshCcw, Copy, CornerDownLeft, Loader2
+  Sparkles, Info, ChevronDown, ChevronUp, CircleStop, Send, RefreshCcw, Copy, CornerDownLeft, Loader2, X
 } from 'lucide-react'
 import styles from './TextToImage.module.css'
 import { toast } from 'react-hot-toast'
 import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import axios from 'axios'
-import {getAxiosErrorMessage } from '../../../lib/api'
+import { getAxiosErrorMessage } from '../../../lib/api'
 
 type Props = {
   engineOnline: boolean
   settings?: GeneralSettingsState
+}
+
+type TaskMeta = {
+  taskId: string
+  seed?: number
+  steps?: number
+  cfg?: number
+  width?: number
+  height?: number
+  format?: string
+}
+
+type Slot = {
+  taskId: string
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILURE'
+  url?: string
+  meta: TaskMeta
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
@@ -51,6 +68,90 @@ const PROMPT_TEMPLATES = [
   'Editorial product lay-flat, soft gradient backdrop, diffused light.',
 ]
 
+// ---------- Preview Modal ----------
+function PreviewModal({
+  open,
+  onClose,
+  slot,
+}: {
+  open: boolean
+  onClose: () => void
+  slot: Slot | null
+}) {
+  if (!open || !slot) return null
+  const { url, meta } = slot
+  const { seed, steps, cfg, width, height, format } = meta
+
+  // Scale image by its intended size so bigger canvases appear bigger.
+  // Base scale around a 768px width reference, but clamp to viewport.
+  const base = 768
+  const scale = Math.min(1.6, Math.max(0.6, (width ?? base) / base))
+  const maxW = Math.min(window.innerWidth * 0.92, (width ?? base) * scale)
+  const maxH = Math.min(window.innerHeight * 0.88, (height ?? base) * scale)
+
+  return (
+    <div className={styles.modalBackdrop} onClick={onClose}>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: `${maxW}px`, maxHeight: `${maxH}px` }}
+      >
+        <div className={styles.modalHeader}>
+          <h3 className={styles.modalTitle}>Preview</h3>
+          <button className={styles.iconBtn} onClick={onClose} aria-label="Close preview" type="button">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className={styles.modalBody}>
+          <div className={styles.modalImageWrap}>
+            {url ? (
+              <img src={url} alt="Generated" className={styles.modalImg} />
+            ) : (
+              <div className={styles.noPreview}>No image</div>
+            )}
+          </div>
+
+          <div className={styles.metaGrid}>
+            <div className={styles.metaCard}>
+              <div className={styles.metaLabel}>Steps</div>
+              <div className={styles.metaValue}>{steps ?? '—'}</div>
+            </div>
+            <div className={styles.metaCard}>
+              <div className={styles.metaLabel}>CFG</div>
+              <div className={styles.metaValue}>{cfg ?? '—'}</div>
+            </div>
+            <div className={styles.metaCard}>
+              <div className={styles.metaLabel}>Seed</div>
+              <div className={styles.metaValue}>{seed ?? '—'}</div>
+            </div>
+            <div className={styles.metaCard}>
+              <div className={styles.metaLabel}>Size</div>
+              <div className={styles.metaValue}>
+                {width && height ? `${width}×${height}` : '—'}
+              </div>
+            </div>
+            <div className={styles.metaCard}>
+              <div className={styles.metaLabel}>Format</div>
+              <div className={styles.metaValue}>{(format || 'png').toUpperCase()}</div>
+            </div>
+          </div>
+        </div>
+
+        {url && (
+          <div className={styles.modalFooter}>
+            <a className={styles.primaryBtnSm} href={url} download={`krea_${seed ?? 'image'}.${(format || 'png')}`}>
+              Download
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function TextToImage({ engineOnline, settings }: Props) {
   // prompt state
   const [prompt, setPrompt] = useState('')
@@ -72,10 +173,14 @@ export default function TextToImage({ engineOnline, settings }: Props) {
   const [refinedDraft, setRefinedDraft] = useState('')
   const [isSuggesting, setIsSuggesting] = useState(false)
 
-  // generation/polling state
+  // generation state
   const [isGenerating, setIsGenerating] = useState(false)
-  const [images, setImages] = useState<string[]>([])
+  const [slots, setSlots] = useState<Slot[]>([])
   const stopPollingRef = useRef(false)
+
+  // preview
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null)
 
   // websockets
   const wsChatRef = useRef<WebSocket | null>(null)
@@ -87,43 +192,26 @@ export default function TextToImage({ engineOnline, settings }: Props) {
   const CHAR_SOFT_LIMIT = 1000
   const overLimit = prompt.length > CHAR_SOFT_LIMIT
 
-  // state additions near the top
-  const [taskIds, setTaskIds] = useState<string[]>([]);
-  const [completedCount, setCompletedCount] = useState(0);
-  const pollControllersRef = useRef<Record<string, AbortController>>({});
+  // controllers + revoke
+  const pollControllersRef = useRef<Record<string, AbortController>>({})
+  const urlsRef = useRef<string[]>([])
+  useEffect(() => { urlsRef.current = slots.map(s => s.url || '').filter(Boolean) }, [slots])
 
-  // helper
-  const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-
-  const imagesRef = useRef<string[]>([]);
-  useEffect(() => { imagesRef.current = images }, [images]);
-  
   useEffect(() => {
     return () => {
       try { wsChatRef.current?.close() } catch {}
       try { wsRefineRef.current?.close() } catch {}
       try { wsNegRef.current?.close() } catch {}
       if (dotsTimerRef.current) clearInterval(dotsTimerRef.current)
-  
-      // NEW: abort all per-task poll controllers on unmount
-      try { Object.values(pollControllersRef.current).forEach(c => c.abort()); } catch {}
-      pollControllersRef.current = {};
-  
-      // revoke latest images
-      revokeAll(imagesRef.current)
-    }
-  }, []);
 
-  // Stop spinner when all done
-  useEffect(() => {
-    if (isGenerating && taskIds.length > 0 && completedCount >= taskIds.length) {
-      setIsGenerating(false);
-      setTaskIds([]);
-    }
-  }, [completedCount, taskIds.length, isGenerating]);
+      try { Object.values(pollControllersRef.current).forEach(c => c.abort()) } catch {}
+      pollControllersRef.current = {}
 
-  // ---------------- ENGINE START (engine service) ----------------
+      revokeAll(urlsRef.current)
+    }
+  }, [])
+
+  // ---------------- ENGINE START ----------------
   const handleStartEngine = async () => {
     if (!API_BASE_URL) {
       toast.error('API base URL not set')
@@ -131,9 +219,7 @@ export default function TextToImage({ engineOnline, settings }: Props) {
     }
     const t = toast.loading('Starting Image Engine...')
     try {
-      const { data } = await axios.post(
-        `${normalizeBase(API_BASE_URL)}${START_ENGINE_ROUTE}`
-      )
+      const { data } = await axios.post(`${normalizeBase(API_BASE_URL)}${START_ENGINE_ROUTE}`)
       toast.dismiss(t)
       const status = data?.status
       if (['RUNNING', 'STARTING', 'REQUESTED'].includes(status)) toast.success('Image Engine is starting.')
@@ -150,159 +236,198 @@ export default function TextToImage({ engineOnline, settings }: Props) {
         'Failed to start Image Engine.'
       toast.error(msg)
     }
-  };  
+  }
 
-  // ---------------- POLLING (mixed: fetch for content-type sniff) ----------------
-  // NEW: poll a single task until it returns image/*, then fill its slot
-  const pollSingle = async (id: string, slotIndex: number) => {
+  // small helper
+  const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+  // ---------------- POLLING A SINGLE TASK ----------------
+  const pollSingle = async (taskId: string, slotIndex: number) => {
     try {
       while (!stopPollingRef.current) {
-        const controller = new AbortController();
-        pollControllersRef.current[id] = controller;
+        const controller = new AbortController()
+        pollControllersRef.current[taskId] = controller
 
-        const res = await fetch(`${normalizeBase(ENGINE_BASE_URL)}${STATUS_ROUTE(id)}`, {
-          signal: controller.signal
-        });
+        const res = await fetch(`${normalizeBase(ENGINE_BASE_URL)}${STATUS_ROUTE(taskId)}`, {
+          signal: controller.signal,
+        })
 
-        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        const ct = (res.headers.get('content-type') || '').toLowerCase()
 
-        // SUCCESS path: backend streams the image bytes
         if (res.ok && ct.startsWith('image/')) {
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
+          const blob = await res.blob()
+          const url = URL.createObjectURL(blob)
 
-          setImages(prev => {
-            const next = [...prev];
-            if (next[slotIndex]?.startsWith('blob:')) { try { URL.revokeObjectURL(next[slotIndex]); } catch {} }
-            next[slotIndex] = url;           // <-- progressive fill
-            return next;
-          });
+          setSlots(prev => {
+            const next = [...prev]
+            const old = next[slotIndex]?.url
+            if (old?.startsWith('blob:')) { try { URL.revokeObjectURL(old) } catch {} }
+            next[slotIndex] = { ...next[slotIndex], status: 'SUCCESS', url }
+            return next
+          })
 
-          delete pollControllersRef.current[id];
-          setCompletedCount(c => c + 1);
-          return; // done for this ID
+          delete pollControllersRef.current[taskId]
+          return
         }
 
-        // Otherwise parse JSON status
-        let data: any = null;
-        try { data = await res.json(); } catch {}
+        // else JSON with state
+        let data: any = null
+        try { data = await res.json() } catch {}
 
         if (data?.state === 'FAILURE') {
-          toast.error(data?.error || `Task ${id} failed`);
-          delete pollControllersRef.current[id];
-          setCompletedCount(c => c + 1); // count it as finished (failed) so UI doesn't hang
-          return;
+          toast.error(data?.error || `Task ${taskId} failed`)
+          setSlots(prev => {
+            const next = [...prev]
+            next[slotIndex] = { ...next[slotIndex], status: 'FAILURE' }
+            return next
+          })
+          delete pollControllersRef.current[taskId]
+          return
         }
 
-        // PENDING/STARTED/etc
-        await delay(1200);
+        // advance spinner
+        setSlots(prev => {
+          const next = [...prev]
+          if (next[slotIndex]?.status === 'PENDING') {
+            next[slotIndex] = { ...next[slotIndex], status: 'RUNNING' }
+          }
+          return next
+        })
+
+        await delay(1200)
       }
     } catch (e: any) {
-      // aborted or network error
-      delete pollControllersRef.current[id];
-      if (!stopPollingRef.current) toast.error(e?.message || `Task ${id} error`);
-      setCompletedCount(c => c + 1);
+      delete pollControllersRef.current[taskId]
+      if (!stopPollingRef.current) toast.error(e?.message || `Task ${taskId} error`)
+      setSlots(prev => {
+        const next = [...prev]
+        next[slotIndex] = { ...next[slotIndex], status: 'FAILURE' }
+        return next
+      })
     }
-  };
+  }
 
-  // ---------------- QUEUE GENERATION (main backend via `api`) ----------------
-  // Modify handleGenerate
+  // ---------------- QUEUE GENERATION ----------------
   const handleGenerate = async () => {
-    if (!prompt.trim()) return;
-    if (!engineOnline) return toast.error('Engine offline. Start it first.');
-    if (!API_BASE_URL) return toast.error('VITE_API_BASE_URL not set');
+    if (isGenerating) {
+      // Toggle behavior: this is now Cancel
+      handleCancelGenerate()
+      return
+    }
 
-    setIsGenerating(true);
-    setCompletedCount(0);
-    setTaskIds([]);
-    stopPollingRef.current = false;
+    if (!prompt.trim()) return
+    if (!engineOnline) return toast.error('Engine offline. Start it first.')
+    if (!API_BASE_URL && !ENGINE_BASE_URL) return toast.error('API base URL not set')
 
-    revokeAll(images);
-    const batch = Number((settings as any)?.numImages ?? (settings as any)?.batch ?? 1);
-    setImages(Array.from({ length: Math.max(1, batch) }, () => '')); // reserve slots
+    setIsGenerating(true)
+    stopPollingRef.current = false
 
-    // build form (as before) + num_images
-    const w = settings?.width ?? 768;
-    const h = settings?.height ?? 1024;
-    const steps = settings?.steps ?? 28;
-    const cfg = settings?.cfg ?? 4.0;
-    const seedStr = (settings?.seed ?? '').toString().trim();
-    const seed = seedStr === '' ? undefined : Number(seedStr);
+    // Clear old
+    revokeAll(urlsRef.current)
+    setSlots([])
 
-    const form = new FormData();
-    form.append('model', 'krea_dev');
-    form.append('prompt', prompt.trim());
-    form.append('negative_prompt', negative.trim());
-    form.append('width', String(w));
-    form.append('height', String(h));
-    form.append('guidance_scale', String(cfg));
-    form.append('num_inference_steps', String(steps));
-    if (Number.isFinite(seed as number)) form.append('seed', String(seed));
-    form.append('out_format', 'png');
-    form.append('num_images', String(Math.max(1, batch))); // 👈 tell backend
+    // Build payload
+    const w = settings?.width ?? 768
+    const h = settings?.height ?? 1024
+    const steps = settings?.steps ?? 28
+    const cfg = settings?.cfg ?? 4.0
+    const batch = Math.max(1, Number((settings as any)?.numImages ?? (settings as any)?.batch ?? 1))
+    const format = (settings as any)?.outFormat ?? 'png'
+    const seedStr = (settings?.seed ?? '').toString().trim()
+    const seed = seedStr === '' ? undefined : Number(seedStr)
+
+    const form = new FormData()
+    form.append('model', 'krea_dev')
+    form.append('prompt', prompt.trim())
+    form.append('negative_prompt', negative.trim())
+    form.append('width', String(w))
+    form.append('height', String(h))
+    form.append('guidance_scale', String(cfg))
+    form.append('num_inference_steps', String(steps))
+    if (Number.isFinite(seed as number)) form.append('seed', String(seed))
+    form.append('out_format', format)
+    form.append('num_images', String(batch))
 
     try {
       const res = await fetch(`${normalizeBase(ENGINE_BASE_URL)}${QUEUE_ROUTE}`, {
         method: 'POST',
         body: form,
-      });
+      })
       if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(txt || `HTTP ${res.status}`);
+        const txt = await res.text().catch(() => '')
+        throw new Error(txt || `HTTP ${res.status}`)
       }
-      const data = await res.json();
+      const data = await res.json()
 
+      // Prepare slots (store metadata immediately)
       if (Array.isArray(data?.task_ids) && data.task_ids.length) {
-        setTaskIds(data.task_ids);
-        data.task_ids.forEach((tid: string, idx: number) => pollSingle(tid, idx));
+        const metas: TaskMeta[] = (Array.isArray(data?.tasks) ? data.tasks : data.task_ids.map((tid: string) => ({ task_id: tid })))
+          .map((t: any, i: number) => ({
+            taskId: t?.task_id || data.task_ids[i],
+            seed: typeof t?.seed === 'number' ? t.seed : (seed as number | undefined),
+            steps: typeof t?.num_inference_steps === 'number' ? t.num_inference_steps : steps,
+            cfg: typeof t?.guidance_scale === 'number' ? t.guidance_scale : cfg,
+            width: w,
+            height: h,
+            format,
+          }))
+
+        const initialSlots: Slot[] = metas.map(m => ({ taskId: m.taskId, status: 'PENDING', url: undefined, meta: m }))
+        setSlots(initialSlots)
+
+        // Start polling each slot
+        metas.forEach((m, idx) => pollSingle(m.taskId, idx))
       } else if (data?.task_id) {
-        setTaskIds([data.task_id]);
-        pollSingle(data.task_id, 0);
+        const m: TaskMeta = {
+          taskId: data.task_id,
+          seed: typeof data?.seed === 'number' ? data.seed : (seed as number | undefined),
+          steps: typeof data?.num_inference_steps === 'number' ? data.num_inference_steps : steps,
+          cfg: typeof data?.guidance_scale === 'number' ? data.guidance_scale : cfg,
+          width: w,
+          height: h,
+          format,
+        }
+        setSlots([{ taskId: m.taskId, status: 'PENDING', url: undefined, meta: m }])
+        pollSingle(m.taskId, 0)
       } else {
-        throw new Error('No task IDs returned');
+        throw new Error('No task IDs returned')
       }
     } catch (e: any) {
-      setIsGenerating(false);
-      toast.error(e?.message || 'Failed to queue generation');
+      setIsGenerating(false)
+      toast.error(e?.message || 'Failed to queue generation')
     }
-  };
+  }
 
-
-  // ---------------- CANCEL GENERATION (engine service) ----------------
-  // Cancel: abort all polls
+  // ---------------- CANCEL GENERATION ----------------
   const handleCancelGenerate = async () => {
-    stopPollingRef.current = true;
+    stopPollingRef.current = true
 
-    // cancel engine tasks if you keep the cancel route (optional)
-    if (ENGINE_BASE_URL && taskIds.length) {
-      for (const id of taskIds) {
+    // cancel engine tasks (optional)
+    if (ENGINE_BASE_URL && slots.length) {
+      for (const s of slots) {
         try {
-          const fd = new FormData();
-          fd.append('task_id', id);
-          await fetch(`${normalizeBase(ENGINE_BASE_URL)}${CANCEL_ROUTE}`, { method: 'POST', body: fd });
+          const fd = new FormData()
+          fd.append('task_id', s.taskId)
+          await fetch(`${normalizeBase(ENGINE_BASE_URL)}${CANCEL_ROUTE}`, { method: 'POST', body: fd })
         } catch {}
       }
     }
 
-    try {
-      Object.values(pollControllersRef.current).forEach(c => c.abort());
-    } catch {}
-    pollControllersRef.current = {};
+    try { Object.values(pollControllersRef.current).forEach(c => c.abort()) } catch {}
+    pollControllersRef.current = {}
 
-    setIsGenerating(false);
-    setTaskIds([]);
-    setCompletedCount(0);
-    toast('Generation cancelled.');
-  };
+    setIsGenerating(false)
+    toast('Generation cancelled.')
+  }
 
-  // ---------------- WebSocket helpers (unchanged, but proxied through your backend) ----------------
+  // ——— Chat / Refine helpers (unchanged) ———
   function makeWsUrl(path: string) {
     try {
       const base = API_BASE_URL || window.location.origin
       const u = new URL(base)
       u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
       const basePath = u.pathname.endsWith('/') ? u.pathname.slice(0, -1) : u.pathname
-      const relPath  = path.startsWith('/') ? path : `/${path}`
+      const relPath = path.startsWith('/') ? path : `/${path}`
       u.pathname = `${basePath}${relPath}`
       return u.toString()
     } catch {
@@ -311,13 +436,11 @@ export default function TextToImage({ engineOnline, settings }: Props) {
       return `${proto}://${location.host}${relPath}`
     }
   }
-
   const WS_PATHS = {
     chat: '/ws/emails/generate-ai/',
     refine: '/ws/images/refine-prompt/',
     negatives: '/ws/images/suggest-negatives/',
   }
-
   function openSocket(path: string, ref: React.MutableRefObject<WebSocket | null>): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
       if (ref.current && ref.current.readyState === WebSocket.OPEN) return resolve(ref.current)
@@ -328,8 +451,18 @@ export default function TextToImage({ engineOnline, settings }: Props) {
       ws.onerror = (ev) => { console.error('WebSocket error:', ev); reject(new Error('WebSocket error')) }
     })
   }
-
-  // --- Refine Prompt (streams to refinedDraft) ---
+  const startThinkingAnimation = () => {
+    let i = 0
+    setThinkingLabel('AI is thinking')
+    dotsTimerRef.current = setInterval(() => {
+      const dots = ['.', '..', '...']
+      setThinkingLabel(`AI is thinking${dots[i % dots.length]}`); i++
+    }, 500)
+  }
+  const stopThinkingAnimation = () => {
+    if (dotsTimerRef.current) { clearInterval(dotsTimerRef.current); dotsTimerRef.current = null }
+    setThinkingLabel('')
+  }
   const handleRefinePrompt = async () => {
     if (!prompt.trim() || isRefining) return
     setIsRefining(true); setRefinedDraft('')
@@ -354,8 +487,6 @@ export default function TextToImage({ engineOnline, settings }: Props) {
       toast.error(err?.message || 'Refine failed'); setIsRefining(false)
     }
   }
-
-  // --- Suggest Negatives (streams to negative) ---
   const handleSuggestWithAI = async () => {
     if (!prompt.trim() || isSuggesting) return
     setIsSuggesting(true); setNegative('')
@@ -379,20 +510,6 @@ export default function TextToImage({ engineOnline, settings }: Props) {
     } catch (err: any) {
       toast.error(err?.message || 'Suggestion failed'); setIsSuggesting(false)
     }
-  }
-
-  // ——— Chat WS ———
-  const startThinkingAnimation = () => {
-    let i = 0
-    setThinkingLabel('AI is thinking')
-    dotsTimerRef.current = setInterval(() => {
-      const dots = ['.', '..', '...']
-      setThinkingLabel(`AI is thinking${dots[i % dots.length]}`); i++
-    }, 500)
-  }
-  const stopThinkingAnimation = () => {
-    if (dotsTimerRef.current) { clearInterval(dotsTimerRef.current); dotsTimerRef.current = null }
-    setThinkingLabel('')
   }
   const sendChatPrompt = async (text: string) => {
     if (isTyping) { try { wsChatRef.current?.close(4001, 'client cancel') } catch {}; return }
@@ -642,23 +759,17 @@ export default function TextToImage({ engineOnline, settings }: Props) {
       {/* Generate / Start */}
       <div className={styles.actionRow}>
         {engineOnline ? (
-          <>
-            <button
-              className={styles.primaryBtn}
-              disabled={!prompt.trim() || isGenerating}
-              onClick={handleGenerate}
-              aria-disabled={!prompt.trim() || isGenerating}
-            >
-              {isGenerating ? <Loader2 className={styles.spinner} /> : <Sparkles size={16} />}
-              {isGenerating ? 'Generating…' : 'Generate'}
-            </button>
-            {isGenerating && (
-              <button className={styles.secondaryBtn} onClick={handleCancelGenerate} type="button">
-                <CircleStop size={16} />
-                Cancel
-              </button>
-            )}
-          </>
+          <button
+            className={styles.primaryBtn}
+            disabled={!prompt.trim()}
+            onClick={handleGenerate}
+            aria-disabled={!prompt.trim()}
+            type="button"
+            title={isGenerating ? 'Cancel' : 'Generate'}
+          >
+            {isGenerating ? <Loader2 className={styles.spinner} /> : <Sparkles size={16} />}
+            {isGenerating ? 'Cancel' : 'Generate'}
+          </button>
         ) : (
           <button className={styles.primaryBtn} onClick={handleStartEngine} type="button">
             Start Image Engine
@@ -667,19 +778,71 @@ export default function TextToImage({ engineOnline, settings }: Props) {
       </div>
 
       {/* Results */}
-      {images.length > 0 && (
+      {slots.length > 0 && (
         <div className={styles.section}>
           <h3 className={styles.sectionHeader}>Results</h3>
-          <div className={styles.gallery}>
-            {images.map((src, i) => (
-              <div className={styles.thumb} key={i}>
-                <img src={src} alt={`Generated ${i + 1}`} />
-                <a className={styles.downloadLink} href={src} download={`krea_${i + 1}.png`}>Download</a>
-              </div>
-            ))}
+
+          <div className={styles.resultGrid}>
+            {slots.map((s, i) => {
+              const isLive = s.status === 'PENDING' || s.status === 'RUNNING'
+              const failed = s.status === 'FAILURE'
+              return (
+                <div
+                  key={s.taskId}
+                  className={`${styles.resultCell} ${isLive ? styles.live : ''} ${failed ? styles.failed : ''}`}
+                  onClick={() => {
+                    if (s.url) {
+                      setPreviewIndex(i)
+                      setPreviewOpen(true)
+                    }
+                  }}
+                  role="button"
+                  aria-label={s.url ? 'Open preview' : 'Generating…'}
+                >
+                  {/* Active bg shimmer while generating */}
+                  {!s.url && !failed && (
+                    <div className={styles.activeBg}>
+                      <div className={styles.pulse} />
+                    </div>
+                  )}
+
+                  {/* Failure state */}
+                  {failed && (
+                    <div className={styles.failedNote}>Failed</div>
+                  )}
+
+                  {/* Image once done */}
+                  {s.url && (
+                    <>
+                      <img src={s.url} className={styles.resultImg} alt={`Result ${i + 1}`} />
+                      <div className={styles.resultMetaMini}>
+                        <span title="Seed">Seed: {s.meta.seed ?? '—'}</span>
+                        <span title="Steps">Steps: {s.meta.steps ?? '—'}</span>
+                        <span title="CFG">CFG: {s.meta.cfg ?? '—'}</span>
+                      </div>
+                      <a
+                        className={styles.downloadLink}
+                        href={s.url}
+                        download={`krea_${s.meta.seed ?? i + 1}.${(s.meta.format || 'png')}`}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        Download
+                      </a>
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
+
+      {/* Preview modal */}
+      <PreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        slot={previewIndex != null ? slots[previewIndex] : null}
+      />
     </div>
   )
 }
