@@ -1,5 +1,6 @@
 // src/components/Image/Settings/GeneralSettings.tsx
-import { useId, useState } from 'react'
+import { useId, useState, useRef, useEffect } from 'react'
+import { ChevronDown, Check } from 'lucide-react'
 import styles from './Settings.module.css'
 
 export type GeneralSettingsState = {
@@ -9,6 +10,7 @@ export type GeneralSettingsState = {
   cfg: number
   batch: number
   seed: string
+  outFormat: 'png' | 'jpg' | 'webp'
 }
 
 type Props = {
@@ -77,7 +79,23 @@ export default function GeneralSettings({ value, onChange }: Props) {
     cfg: useId(),
     batch: useId(),
     seed: useId(),
+    outFormat: useId(),
   }
+
+  // Output format dropdown
+  const [showFormatDropdown, setShowFormatDropdown] = useState(false)
+  const formatRef = useRef<HTMLDivElement | null>(null)
+  const fileFormats: Array<GeneralSettingsState['outFormat']> = ['png', 'jpg', 'webp']
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (formatRef.current && !formatRef.current.contains(e.target as Node)) {
+        setShowFormatDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
 
   return (
     <section className={styles.wrap}>
@@ -169,6 +187,49 @@ export default function GeneralSettings({ value, onChange }: Props) {
             onChange={(e) => set('seed', e.target.value)}
             placeholder="-1 or empty = random"
           />
+        </div>
+      </div>
+
+      {/* Row 4: Output Format (custom dropdown styled like Voice Settings) */}
+      <div className={styles.single}>
+        <div className={styles.field} ref={formatRef}>
+          <label htmlFor={ids.outFormat} className={styles.label}>Output Format</label>
+          <div
+            id={ids.outFormat}
+            className={styles.selectPanel}
+            role="button"
+            aria-haspopup="listbox"
+            aria-expanded={showFormatDropdown}
+            onClick={() => setShowFormatDropdown((v) => !v)}
+          >
+            <div className={styles.selector}>
+              <span className={styles.selectorText}>{value.outFormat.toUpperCase()}</span>
+              <ChevronDown size={16} />
+            </div>
+            {showFormatDropdown && (
+              <div className={styles.dropdown} role="listbox">
+                {fileFormats.map((fmt) => {
+                  const selected = fmt === value.outFormat
+                  return (
+                    <div
+                      key={fmt}
+                      role="option"
+                      aria-selected={selected}
+                      className={`${styles.dropdownItem} ${selected ? styles.selected : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        set('outFormat', fmt)
+                        setShowFormatDropdown(false)
+                      }}
+                    >
+                      <span>{fmt.toUpperCase()}</span>
+                      {selected && <Check size={16} className={styles.checkIcon} />}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>

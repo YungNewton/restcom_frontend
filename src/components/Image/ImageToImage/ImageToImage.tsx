@@ -116,17 +116,26 @@ export default function ImageToImage({ engineOnline }: Props) {
 
   // engine
   const handleStartEngine = async () => {
-    toast.loading('Starting Image Engine...')
+    const t = toast.loading('Starting Image Engine...')
     try {
-      const res = await axios.post(`${API_BASE_URL}/image/start-runpod/`)
-      toast.dismiss()
-      const status = res.data.status
-      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(status)) toast.success('Image Engine is starting.')
-      else if (status === 'HEALTHY') toast.success('Image Engine is already live. Refresh if needed.')
-      else toast.error(`Engine status: ${status || 'Unknown'}`)
-    } catch {
-      toast.dismiss()
-      toast.error('Failed to start Image Engine.')
+      const res = await axios.post(`${API_BASE_URL}/images/start-runpod/`)
+      toast.dismiss(t)
+      const statusText = res.data.status
+      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(statusText)) {
+        toast.success('Image Engine is starting.')
+      } else if (statusText === 'HEALTHY') {
+        toast.success('Image Engine is already live. Refresh if needed.')
+      } else {
+        toast.error(`Engine status: ${statusText || 'Unknown'}`)
+      }
+    } catch (err: any) {
+      toast.dismiss(t)
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Failed to start Image Engine.'
+      toast.error(msg)
     }
   }
 

@@ -77,7 +77,7 @@ const Voice = () => {
               engineOnline ? styles.online : styles.offline
             }`}
           ></div>
-          <span>AI Engine {engineOnline ? 'Online' : 'Offline'}</span>
+          <span>Voice Engine {engineOnline ? 'Online' : 'Offline'}</span>
         </div>
       </div>
 

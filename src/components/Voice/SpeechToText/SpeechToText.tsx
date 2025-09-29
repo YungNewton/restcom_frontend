@@ -138,26 +138,29 @@ const SpeechToText = ({ engineOnline }: Props) => {
   };
 
   const handleStartEngine = async () => {
-    toast.loading('Starting Voice Engine...');
+    const t = toast.loading('Starting Voice Engine…')
     try {
-      const res = await axios.post(`${API_BASE_URL}/voice/start-runpod/`);
-      toast.dismiss();
+      const res = await axios.post(`${API_BASE_URL}/voice/start-runpod/`)
+      toast.dismiss(t)
   
-      const status = res.data.status;
-  
-      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(status)) {
-        toast.success('Voice Engine is starting.');
-      } else if (status === 'HEALTHY') {
-        toast.success('Voice Engine is already live. Refresh the page if needed.');
+      const statusText = res.data.status
+      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(statusText)) {
+        toast.success('Voice Engine is starting.')
+      } else if (statusText === 'HEALTHY') {
+        toast.success('Voice Engine is already live. Refresh the page if needed.')
       } else {
-        toast.error(`Engine status: ${status || 'Unknown'}`);
+        toast.error(`Engine status: ${statusText || 'Unknown'}`)
       }
     } catch (err: any) {
-      toast.dismiss();
-      console.error('API Error:', err);
-      toast.error('Failed to start Voice Engine.');
+      toast.dismiss(t)
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Failed to start Voice Engine.'
+      toast.error(msg)
     }
-  };  
+  }; 
 
   return (
     <div className={styles.wrapper}>

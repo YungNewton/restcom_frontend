@@ -48,11 +48,12 @@ const Image = () => {
     cfg: 4.0,
     batch: 1,
     seed: '',
+    outFormat: 'png',
   })
 
   useEffect(() => {
     // Reuse voice SSE for now; swap if an /image/status/stream exists
-    const es = new EventSource(`${API_BASE}/voice/status/stream`)
+    const es = new EventSource(`${API_BASE}/image/status/stream`)
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
@@ -105,7 +106,7 @@ const Image = () => {
 
         <div className={`${styles.engineStatus} ${engineOnline ? styles.onlineStatus : ''}`}>
           <div className={`${styles.statusDot} ${engineOnline ? styles.online : styles.offline}`}></div>
-          <span>AI Engine {engineOnline ? 'Online' : 'Offline'}</span>
+          <span>Image Engine {engineOnline ? 'Online' : 'Offline'}</span>
         </div>
       </div>
 

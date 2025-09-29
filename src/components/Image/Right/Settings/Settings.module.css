@@ -1,83 +1,152 @@
+/* src/components/Image/Settings/Settings.module.css */
+
 /* ---------- Tokens ---------- */
 :root{
-    --panel-bg:#151515;
-    --panel-border:#333;
-    --panel-radius:12px;
-    --ring:#2f6bff;
-    --ring-soft:rgba(11,97,255,.22);
-    --fg:#e9eef7;
-    --fg-dim:#9aa5b1;
-    --input-bg:#1f1f1f;
-    --input-border:#3a3a3a;
-    --input-border-hover:#4a4a4a;
-  }
-  
-  /* ---------- Layout ---------- */
-  .wrap{
-    background: transparent;
-    border: none;        /* ← remove */
-    box-shadow: none;    /* if you had a panel shadow/ring */
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  /* if something was drawing a pseudo ring */
-  .wrap::before{ content: none; }
-  
-  
-  .sectionHeader{
-    margin:0;
-    color:#fff;
-    font-weight:600;
-    font-size:1.05rem;
-  }
-  
-  .pair{
-    display:grid;
-    grid-template-columns:1fr;
-    gap:12px;
-  }
-  @media (min-width:560px){
-    .pair{ grid-template-columns:1fr 1fr; }
-  }
-  
-  /* ---------- Fields ---------- */
-  .field{ display:flex; flex-direction:column; gap:6px; }
-  
-  .label{
-    color:var(--fg);
-    font-size:.85rem;
-  }
-  
-  .input{
-    inline-size:100%;
-    appearance:textfield;
-    background:var(--input-bg);
-    color:var(--fg);
-    border:1px solid var(--input-border);
-    border-radius:10px;
-    padding:.6rem .75rem;
-    font-size:.95rem;
-    transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
-  }
-  
-  .input:hover{
-    border-color:var(--input-border-hover);
-  }
-  
-  .input:focus{
-    outline:none;
-    border-color:var(--ring);
-    box-shadow:0 0 0 3px var(--ring-soft);
-  }
-  
-  /* Remove numeric spin buttons (WebKit) */
-  .input[type="number"]::-webkit-outer-spin-button,
-  .input[type="number"]::-webkit-inner-spin-button{
-    -webkit-appearance:none; margin:0;
-  }
-  /* Firefox */
-  .input[type="number"]{ -moz-appearance:textfield; }
-  
+  --panel-bg:#151515;
+  --panel-border:#333;
+  --panel-radius:12px;
+  --ring:#2f6bff;
+  --ring-soft:rgba(11,97,255,.22);
+  --fg:#e9eef7;
+  --fg-dim:#9aa5b1;
+  --input-bg:#1f1f1f;
+  --input-border:#3a3a3a;
+  --input-border-hover:#4a4a4a;
+}
+
+/* ---------- Layout ---------- */
+.wrap{
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wrap::before{ content: none; }
+
+.sectionHeader{
+  margin:0;
+  color:#fff;
+  font-weight:600;
+  font-size:1.05rem;
+}
+
+.pair{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:12px;
+}
+@media (min-width:560px){
+  .pair{ grid-template-columns:1fr 1fr; }
+}
+
+.single{ display:block; }
+
+/* ---------- Fields ---------- */
+.field{ display:flex; flex-direction:column; gap:6px; }
+
+.label{
+  color:var(--fg);
+  font-size:.85rem;
+}
+
+.input{
+  inline-size:100%;
+  appearance:textfield;
+  background:var(--input-bg);
+  color:var(--fg);
+  border:1px solid var(--input-border);
+  border-radius:10px;
+  padding:.6rem .75rem;
+  font-size:.95rem;
+  transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.input:hover{
+  border-color:var(--input-border-hover);
+}
+
+.input:focus{
+  outline:none;
+  border-color:var(--ring);
+  box-shadow:0 0 0 3px var(--ring-soft);
+}
+
+/* Remove numeric spin buttons (WebKit) */
+.input[type="number"]::-webkit-outer-spin-button,
+.input[type="number"]::-webkit-inner-spin_button{
+  -webkit-appearance:none; margin:0;
+}
+/* Firefox */
+.input[type="number"]{ -moz-appearance:textfield; }
+
+/* ---------- Custom Select (matches Voice Settings vibe) ---------- */
+.selectPanel{
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.selector{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+}
+
+.selectorText{
+  flex:1;
+  font-size:.9rem;
+  color:#fff;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.dropdown{
+  background:#222;
+  border:1px solid #333;
+  border-radius:8px;
+  position:absolute;
+  top:110%;
+  left:0;
+  width:100%;
+  z-index:10;
+}
+
+.dropdownItem{
+  font-size:.9rem;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.5rem;
+  padding:.55rem 1rem;
+  cursor:pointer;
+  color:#fff;
+}
+
+.dropdownItem:hover{
+  background:#2a2a2a;
+}
+
+.selected{
+  background:#242424;
+}
+
+.checkIcon{
+  opacity:.9;
+  flex-shrink:0;
+}
+
+/* ---------- Responsive tweaks ---------- */
+@media (max-width: 768px){
+  .selectorText{ font-size:.85rem; }
+  .dropdownItem{ font-size:.85rem; padding:.5rem .9rem; }
+}
