@@ -1,6 +1,6 @@
 // src/components/Image/Settings/GeneralSettings.tsx
 import { useId, useState, useRef, useEffect } from 'react'
-import { ChevronDown, Check } from 'lucide-react'
+import { ChevronDown, Check, HelpCircle } from 'lucide-react'
 import styles from './Settings.module.css'
 
 export type GeneralSettingsState = {
@@ -16,6 +16,82 @@ export type GeneralSettingsState = {
 type Props = {
   value: GeneralSettingsState
   onChange: (v: GeneralSettingsState) => void
+}
+
+function LabelWithTip({
+  htmlFor,
+  label,
+  tip,
+}: {
+  htmlFor?: string
+  label: string
+  tip: string
+}) {
+  const wrapRef = useRef<HTMLSpanElement | null>(null)
+  const activeRef = useRef(false)
+
+  const place = () => {
+    const el = wrapRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+
+    const cx = r.left + r.width / 2
+    const cyTop = r.top
+    const cyBottom = r.bottom
+
+    const gutter = 12
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+
+    // Choose side with more room (prefer top if enough headroom)
+    const hasTopRoom = cyTop > 64
+    const side = hasTopRoom ? 'top' : 'bottom'
+    el.dataset.side = side
+
+    // Clamp X within viewport gutters
+    const clampedX = Math.max(gutter, Math.min(vw - gutter, cx))
+    const y = side === 'top' ? cyTop : cyBottom
+
+    // Clamp Y just in case (rare)
+    const clampedY = Math.max(0, Math.min(vh, y))
+
+    el.style.setProperty('--tt-left', `${clampedX}px`)
+    el.style.setProperty('--tt-top', `${clampedY}px`)
+  }
+
+  useEffect(() => {
+    const onReflow = () => {
+      if (activeRef.current) place()
+    }
+    window.addEventListener('resize', onReflow)
+    // capture scroll on ancestors too
+    window.addEventListener('scroll', onReflow, true)
+    return () => {
+      window.removeEventListener('resize', onReflow)
+      window.removeEventListener('scroll', onReflow, true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className={styles.labelRow}>
+      <label htmlFor={htmlFor} className={styles.label}>{label}</label>
+      <span
+        ref={wrapRef}
+        className={styles.tooltipWrapper}
+        data-tooltip={tip}
+        data-side="top"
+        tabIndex={0}
+        aria-label={tip}
+        onMouseEnter={() => { activeRef.current = true; place() }}
+        onMouseLeave={() => { activeRef.current = false }}
+        onFocus={() => { activeRef.current = true; place() }}
+        onBlur={() => { activeRef.current = false }}
+      >
+        <HelpCircle size={14} className={styles.helpIcon} />
+      </span>
+    </div>
+  )
 }
 
 /** Reusable number input that lets users clear/type freely.
@@ -137,7 +213,11 @@ export default function GeneralSettings({ value, onChange }: Props) {
       {/* Row 2: Steps / CFG */}
       <div className={styles.pair}>
         <div className={styles.field}>
-          <label htmlFor={ids.steps} className={styles.label}>Steps</label>
+          <LabelWithTip
+            htmlFor={ids.steps}
+            label="Steps"
+            tip="More steps → more detail but slower; diminishing returns past ~30."
+          />
           <NumberField
             id={ids.steps}
             className={styles.input}
@@ -150,7 +230,11 @@ export default function GeneralSettings({ value, onChange }: Props) {
         </div>
 
         <div className={styles.field}>
-          <label htmlFor={ids.cfg} className={styles.label}>CFG</label>
+          <LabelWithTip
+            htmlFor={ids.cfg}
+            label="CFG (Adherence)"
+            tip="Higher values force closer adherence to the prompt (less creativity). Try 3–6."
+          />
           <NumberField
             id={ids.cfg}
             className={styles.input}
@@ -166,7 +250,11 @@ export default function GeneralSettings({ value, onChange }: Props) {
       {/* Row 3: Batch / Seed */}
       <div className={styles.pair}>
         <div className={styles.field}>
-          <label htmlFor={ids.batch} className={styles.label}>Batch</label>
+          <LabelWithTip
+            htmlFor={ids.batch}
+            label="Batch"
+            tip="How many images to generate in one run."
+          />
           <NumberField
             id={ids.batch}
             className={styles.input}
@@ -179,7 +267,11 @@ export default function GeneralSettings({ value, onChange }: Props) {
         </div>
 
         <div className={styles.field}>
-          <label htmlFor={ids.seed} className={styles.label}>Seed</label>
+          <LabelWithTip
+            htmlFor={ids.seed}
+            label="Seed"
+            tip="Use a fixed seed for repeatability. Empty or -1 = random each run."
+          />
           <input
             id={ids.seed}
             className={styles.input}

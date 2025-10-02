@@ -1,4 +1,6 @@
-/* ---------- Tokens ---------- */
+/* =========================================
+   TOKENS
+========================================= */
 :root {
   --panel-bg: #151515;
   --panel-border: #333;
@@ -13,7 +15,9 @@
   --primary-600: #0063db;
 }
 
-/* ---------- Base layout ---------- */
+/* =========================================
+ BASE LAYOUT
+========================================= */
 .wrap {
   display: flex;
   flex-direction: column;
@@ -23,19 +27,16 @@
   margin-inline: auto;
   padding-inline: clamp(0.5rem, 2vw, 0.75rem);
 }
-
 .section {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
 }
-
 .labelRow {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
 }
-
 .sectionHeader {
   color: #ffffff;
   font-weight: 600;
@@ -43,13 +44,14 @@
   margin: 0;
   letter-spacing: 0.1px;
 }
-
 .counter {
   color: #a7b0bb;
   font-size: 0.8rem;
 }
 
-/* ---------- Inputs ---------- */
+/* =========================================
+ INPUTS
+========================================= */
 .input {
   width: 100%;
   background: var(--input-bg);
@@ -61,27 +63,25 @@
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
-
 .input::placeholder {
   color: #8b93a1;
 }
-
 .input:hover {
   border-color: var(--input-border-hover);
   background: #222;
 }
-
 .input:focus-visible {
   border-color: #5aa3ff;
   box-shadow: 0 0 0 3px rgba(0, 115, 255, 0.18);
 }
-
 .textarea {
   resize: vertical;
   line-height: 1.55;
 }
 
-/* ---------- Suggestion bar ---------- */
+/* =========================================
+ SUGGESTION BAR
+========================================= */
 .sampleBar {
   display: flex;
   overflow-x: auto;
@@ -90,11 +90,9 @@
   scrollbar-width: thin;
   scrollbar-color: #3a3a3a transparent;
 }
-
 .sampleBar::-webkit-scrollbar {
   height: 6px;
 }
-
 .sampleBar::-webkit-scrollbar-thumb {
   background: #3a3a3a;
   border-radius: 999px;
@@ -118,7 +116,6 @@
   transition: background 0.25s, transform 0.25s, box-shadow 0.25s, border-color 0.25s;
   box-shadow: 0 0 6px rgba(0, 115, 255, 0.05);
 }
-
 .sampleBtn:hover,
 .sampleBtn:focus-visible {
   background: #2b2b2b;
@@ -128,34 +125,32 @@
   outline: none;
 }
 
-/* ---------- Action rows ---------- */
+/* =========================================
+ ACTION ROWS & BUTTONS
+========================================= */
 .actionRow {
   display: flex;
   justify-content: flex-end;
   margin-top: 0.2rem;
 }
-
 .actionRowLeft {
   display: flex;
   justify-content: flex-start;
   margin-top: 0.5rem;
   gap: 0.6rem;
 }
-
 .actionRowSplit {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-top: 0.5rem;
 }
-
 .actionGroupLeft {
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
 }
 
-/* ---------- Primary buttons (Generate/Cancel) ---------- */
 .primaryBtn {
   background: var(--primary);
   color: #fff;
@@ -170,21 +165,17 @@
   gap: 0.5rem;
   transition: background 0.2s ease-in-out, opacity 0.2s, transform 0.12s;
 }
-
 .primaryBtn:hover {
   background: var(--primary-600);
   transform: translateY(-1px);
 }
-
 .primaryBtn:active {
   transform: translateY(0);
 }
-
 .primaryBtn:focus-visible {
   box-shadow: 0 0 0 3px rgba(0, 115, 255, 0.22);
   outline: none;
 }
-
 .primaryBtn[aria-disabled="true"],
 .primaryBtn:disabled {
   opacity: 0.58;
@@ -192,7 +183,6 @@
   transform: none;
 }
 
-/* small primary for preview actions */
 .primaryBtnSm {
   background: var(--primary);
   color: #fff;
@@ -203,18 +193,15 @@
   cursor: pointer;
   transition: background 0.18s, transform 0.12s;
 }
-
 .primaryBtnSm:hover {
   background: var(--primary-600);
   transform: translateY(-1px);
 }
-
 .primaryBtnSm:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(0, 115, 255, 0.22);
 }
 
-/* subtle secondary for discard */
 .secondaryBtn {
   background: #262626;
   color: #e7f0ff;
@@ -225,14 +212,12 @@
   cursor: pointer;
   transition: background 0.18s, border-color 0.18s, transform 0.12s;
 }
-
 .secondaryBtn:hover {
   background: #2e2e2e;
   border-color: #4a4a4a;
   transform: translateY(-1px);
 }
 
-/* ---------- Magic button (refine/suggest) ---------- */
 .magicBtn {
   background: linear-gradient(180deg, #101010 0%, #181818 100%);
   color: #e7f0ff;
@@ -245,30 +230,27 @@
   align-items: center;
   gap: 0.45rem;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 2px 10px rgba(0, 115, 255, 0.15),
-    0 0 0 1px rgba(0, 115, 255, 0.08);
+      inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+      0 2px 10px rgba(0, 115, 255, 0.15),
+      0 0 0 1px rgba(0, 115, 255, 0.08);
   backdrop-filter: blur(2px);
   transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s, background 0.18s;
 }
-
 .magicBtn:hover {
   transform: translateY(-1px);
   border-color: rgba(0, 115, 255, 0.55);
   background: linear-gradient(180deg, #131313 0%, #1d1d1d 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    0 4px 16px rgba(0, 115, 255, 0.22),
-    0 0 0 1px rgba(0, 115, 255, 0.12);
+      inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+      0 4px 16px rgba(0, 115, 255, 0.22),
+      0 0 0 1px rgba(0, 115, 255, 0.12);
 }
-
 .magicBtn[aria-disabled="true"],
 .magicBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-/* ---------- Chat toggle ---------- */
 .chatToggleBtn {
   background: #101010;
   color: #d7e7ff;
@@ -282,14 +264,15 @@
   gap: 0.35rem;
   transition: background 0.18s, border-color 0.18s, transform 0.18s;
 }
-
 .chatToggleBtn:hover {
   transform: translateY(-1px);
   border-color: rgba(0, 115, 255, 0.55);
   background: #151515;
 }
 
-/* ---------- Chat card ---------- */
+/* =========================================
+ CHAT CARD
+========================================= */
 .chatCard {
   margin-top: 0.65rem;
   background: #151515;
@@ -299,14 +282,12 @@
   box-shadow: 0 0 0 1px #262626, 0 0 8px rgba(0, 115, 255, 0.08);
   max-width: 560px;
 }
-
 .chatPromptBar {
   position: relative;
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
-
 .chatPromptBar input {
   flex: 1;
   padding: 0.72rem 3rem 0.72rem 0.95rem;
@@ -317,7 +298,6 @@
   font-size: 0.92rem;
   outline: none;
 }
-
 .chatPromptBar input:focus-visible {
   border-color: #5aa3ff;
   box-shadow: 0 0 0 3px rgba(0, 115, 255, 0.18);
@@ -336,10 +316,17 @@
   cursor: pointer;
   transition: transform 0.18s, color 0.18s;
 }
-
 .chatSendBtn:hover {
   transform: scale(1.12);
   color: #ffffff;
+}
+.chatSendBtn,
+.chatSendBtn:hover,
+.chatSendBtn:focus,
+.chatSendBtn:focus-visible,
+.chatSendBtn:active {
+  background: transparent !important;
+  box-shadow: none;
 }
 
 .chatThinking {
@@ -357,11 +344,9 @@
   height: 170px;
   overflow: auto;
 }
-
 .chatResponseBox::-webkit-scrollbar {
   width: 8px;
 }
-
 .chatResponseBox::-webkit-scrollbar-thumb {
   background: #3a3a3a;
   border-radius: 999px;
@@ -382,7 +367,6 @@
   justify-content: space-between;
   align-items: center;
 }
-
 .chatActions .left,
 .chatActions .right {
   display: inline-flex;
@@ -399,7 +383,6 @@
   cursor: pointer;
   transition: background 0.18s, border-color 0.18s, transform 0.12s;
 }
-
 .chatIconBtn:hover {
   background: #2e2e2e;
   border-color: #4a4a4a;
@@ -415,13 +398,14 @@
   cursor: pointer;
   transition: background 0.18s, transform 0.12s;
 }
-
 .chatIconBtnPrimary:hover {
   background: var(--primary-600);
   transform: translateY(-1px);
 }
 
-/* ---------- Info ---------- */
+/* =========================================
+ INFO BOX + REFINED PREVIEW
+========================================= */
 .infoBox {
   background: linear-gradient(145deg, #1d1d1d, #222);
   border: 1px solid #444;
@@ -432,7 +416,6 @@
   margin: 1rem 0;
   box-shadow: 0 0 0 1px #292929, 0 0 8px rgba(0, 115, 255, 0.1);
 }
-
 .infoBox:hover {
   box-shadow: 0 0 0 1px #444, 0 0 12px rgba(0, 115, 255, 0.2);
 }
@@ -447,7 +430,6 @@
   cursor: pointer;
   user-select: none;
 }
-
 .rotated {
   transform: rotate(180deg);
   transition: transform 0.3s ease;
@@ -456,7 +438,6 @@
 .tipList {
   padding-top: 0.5rem;
 }
-
 .tipList p {
   margin: 0.35rem 0;
   padding-left: 1.4rem;
@@ -464,13 +445,11 @@
   color: #c1c7d3;
   line-height: 1.45;
 }
-
 .tipList p::before {
   content: "•";
   position: absolute;
   left: 0;
 }
-
 .tipList code {
   background: #2a2a2a;
   padding: 0.1rem 0.3rem;
@@ -478,7 +457,6 @@
   color: #eef3ff;
 }
 
-/* refined preview */
 .refinePreview {
   margin-top: 0.65rem;
   background: #171717;
@@ -487,7 +465,6 @@
   padding: 0.75rem;
   box-shadow: 0 0 0 1px #262626, 0 0 8px rgba(0, 115, 255, 0.06);
 }
-
 .previewHeader {
   display: flex;
   align-items: center;
@@ -495,7 +472,6 @@
   color: #dbe7ff;
   margin-bottom: 0.5rem;
 }
-
 .previewActions {
   display: inline-flex;
   align-items: center;
@@ -507,14 +483,15 @@
   font-size: 0.85rem;
   color: #bcd3ff;
 }
-
 .softWarn {
   margin-top: 0.35rem;
   font-size: 0.82rem;
   color: #ffce8a;
 }
 
-/* mini spinner */
+/* =========================================
+ SPINNERS
+========================================= */
 .spinnerMini {
   display: inline-block;
   width: 14px;
@@ -525,10 +502,9 @@
   animation: tti-spin 0.8s linear infinite;
   margin-right: 6px;
 }
-
 @keyframes tti-spin {
   to {
-    transform: rotate(360deg);
+      transform: rotate(360deg);
   }
 }
 
@@ -541,23 +517,23 @@
   animation: spin 0.8s linear infinite;
   margin-right: 0.5rem;
 }
-
 @keyframes spin {
   0% {
-    transform: rotate(0);
+      transform: rotate(0);
   }
   100% {
-    transform: rotate(360deg);
+      transform: rotate(360deg);
   }
 }
 
-/* ---------- Results Grid ---------- */
+/* =========================================
+ RESULTS GRID
+========================================= */
 .resultGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 0.8rem;
 }
-
 .resultCell {
   position: relative;
   background: #111;
@@ -565,18 +541,16 @@
   border-radius: 12px;
   overflow: hidden;
   min-height: 180px;
-  cursor: default;
+  cursor: pointer; /* clickable by default */
 }
-
 .resultCell.live {
   cursor: progress;
 }
-
 .resultCell:not(.live):hover {
-  border-color: #3e3e3e;
+  border-color: #4a4a4a;
+  box-shadow: 0 0 0 1px #2a2a2a;
 }
 
-/* shimmering active background */
 .activeBg {
   position: absolute;
   inset: 0;
@@ -585,17 +559,15 @@
   animation: shimmer 1.4s ease-in-out infinite;
   filter: saturate(1.1);
 }
-
 @keyframes shimmer {
   0% {
-    background-position: 200% 0;
+      background-position: 200% 0;
   }
   100% {
-    background-position: -200% 0;
+      background-position: -200% 0;
   }
 }
 
-/* gentle pulse overlay to signify generation */
 .pulse {
   position: absolute;
   inset: 0;
@@ -603,23 +575,20 @@
   background: radial-gradient(120% 60% at 50% 50%, rgba(0, 115, 255, 0.08), transparent 60%);
   animation: pulseGlow 1.8s ease-in-out infinite;
 }
-
 @keyframes pulseGlow {
   0%,
   100% {
-    opacity: 0.55;
+      opacity: 0.55;
   }
   50% {
-    opacity: 0.9;
+      opacity: 0.9;
   }
 }
 
-/* failure state */
 .failed {
   background: #150f0f;
   border-color: #4a2222;
 }
-
 .failedNote {
   position: absolute;
   inset: 0;
@@ -630,50 +599,57 @@
   letter-spacing: 0.2px;
 }
 
-/* finished image */
 .resultImg {
   display: block;
   inline-size: 100%;
   block-size: 260px;
   object-fit: cover;
   background: #181818;
+  cursor: pointer;
 }
 
+/* hide any old per-tile meta/download UI */
 .resultMetaMini {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
+  display: none !important;
+}
+.resultCell .downloadLink {
+  display: none !important;
+}
+
+/* Bottom download bar */
+.downloadBox {
+  margin-top: 1rem;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
   display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-  background: #0b0b0bcc;
-  border: 1px solid #2a2a2a;
-  color: #e9eef7;
-  border-radius: 8px;
-  padding: 0.25rem 0.4rem;
-  font-size: 0.74rem;
-  backdrop-filter: blur(4px);
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
 }
-
 .downloadLink {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  background: #141414cc;
-  border: 1px solid #2a2a2a;
-  color: #e7f0ff;
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #0073ff;
+  font-size: 0.9rem;
+  font-weight: 500;
   text-decoration: none;
-  border-radius: 8px;
-  padding: 0.28rem 0.5rem;
-  font-size: 0.76rem;
-  backdrop-filter: blur(4px);
+  padding: 0;
+  border: none;
+  background: none;
+  backdrop-filter: none;
+  transition: color 0.2s ease-in-out;
 }
-
 .downloadLink:hover {
-  background: #191919;
+  color: #56aaff;
 }
 
-/* ---------- Preview Modal ---------- */
+/* =========================================
+ PREVIEW MODAL + CAROUSEL
+========================================= */
 .modalBackdrop {
   position: fixed;
   inset: 0;
@@ -682,7 +658,6 @@
   place-items: center;
   z-index: 50;
 }
-
 .modal {
   inline-size: min(92vw, 1000px);
   max-block-size: 88vh;
@@ -693,19 +668,27 @@
   padding: 0.9rem;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
-
 .modalHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
-
 .modalTitle {
   margin: 0;
   color: #fff;
   font-size: 1.05rem;
   font-weight: 600;
+}
+
+.modalHeaderRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.modalCounter {
+  color: var(--fg-dim);
+  font-size: 0.85rem;
 }
 
 .iconBtn {
@@ -721,7 +704,6 @@
   line-height: 0;
   padding: 0;
 }
-
 .iconBtn:hover {
   background: #2e2e2e;
   border-color: #4a4a4a;
@@ -735,6 +717,7 @@
 }
 
 .modalImageWrap {
+  position: relative; /* anchor arrows */
   inline-size: 100%;
   max-block-size: 65vh;
   background: #181818;
@@ -743,7 +726,6 @@
   display: grid;
   place-items: center;
 }
-
 .modalImg {
   max-inline-size: 100%;
   max-block-size: 65vh;
@@ -754,24 +736,119 @@
   border-radius: 12px;
 }
 
+/* Carousel arrows (LoRA-style) */
+.carouselBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  inline-size: 36px;
+  block-size: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid #2f2f2f;
+  background: rgba(20, 20, 20, 0.78);
+  backdrop-filter: blur(4px);
+  color: #e9eef7;
+  cursor: pointer;
+  line-height: 0;
+  padding: 0;
+  z-index: 2;
+  transition: background 0.2s, border-color 0.2s, transform 0.12s, box-shadow 0.2s;
+}
+.carouselBtnLeft {
+  left: 8px;
+}
+.carouselBtnRight {
+  right: 8px;
+}
+.carouselBtn:hover {
+  background: rgba(26, 26, 26, 0.9);
+  border-color: #3a3a3a;
+  transform: translateY(-50%) scale(1.05);
+}
+.carouselBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring-soft);
+}
+
+/* Thumbnails under the main preview */
+.thumbsRow {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-top: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3a transparent;
+}
+.thumbsRow::-webkit-scrollbar {
+  height: 8px;
+}
+.thumbsRow::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 999px;
+}
+
+.thumb {
+  inline-size: 80px;
+  block-size: 58px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #181818;
+  border: 1px solid #2c2c2c;
+  padding: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+  position: relative;
+  transition: border-color 0.18s, transform 0.12s, box-shadow 0.18s;
+}
+.thumb:hover {
+  border-color: #3a3a3a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.thumb:disabled {
+  cursor: default;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
+}
+.thumb img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  display: block;
+}
+.thumbActive {
+  outline: 2px solid #0b61ff;
+  border-color: #0b61ff;
+}
+
+.thumbSkeleton {
+  inline-size: 100%;
+  block-size: 100%;
+  background: linear-gradient(110deg, #141414 25%, #1b1b1b 35%, #141414 45%) no-repeat;
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  filter: saturate(1.05);
+}
+
 .metaGrid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.5rem;
 }
-
 .metaCard {
   background: #151515;
   border: 1px solid #2c2c2c;
   border-radius: 12px;
   padding: 0.6rem;
 }
-
 .metaLabel {
   color: #9aa5b1;
   font-size: 0.75rem;
 }
-
 .metaValue {
   color: #e9eef7;
   font-size: 0.9rem;
@@ -785,7 +862,9 @@
   gap: 0.5rem;
 }
 
-/* ---------- Utility ---------- */
+/* =========================================
+ UTILITY
+========================================= */
 .noPreview {
   inline-size: 100%;
   block-size: 100%;
@@ -796,77 +875,89 @@
   background: #181818;
 }
 
-/* ---------- Responsive ---------- */
+/* =========================================
+ RESPONSIVE
+========================================= */
 @media (max-width: 1024px) {
   .wrap {
-    max-width: 740px;
+      max-width: 740px;
   }
   .metaGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-
 @media (max-width: 768px) {
   .wrap {
-    max-width: 100%;
+      max-width: 100%;
   }
   .sampleBtn {
-    max-width: 260px;
+      max-width: 260px;
   }
   .chatCard {
-    max-width: 100%;
+      max-width: 100%;
   }
   .chatSendBtn {
-    width: 42px;
-    height: 42px;
+      width: 42px;
+      height: 42px;
   }
   .primaryBtn {
-    width: 100%;
-    justify-content: center;
+      width: 100%;
+      justify-content: center;
   }
   .actionRow {
-    justify-content: center;
+      justify-content: center;
   }
   .resultImg {
-    block-size: 220px;
+      block-size: 220px;
   }
   .metaGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-
+@media (max-width: 600px) {
+  .carouselBtn {
+      inline-size: 42px;
+      block-size: 42px;
+  }
+  .thumb {
+      inline-size: 72px;
+      block-size: 52px;
+  }
+}
 @media (max-width: 480px) {
   .sectionHeader {
-    font-size: 0.92rem;
+      font-size: 0.92rem;
   }
   .input {
-    padding: 0.72rem 0.9rem;
+      padding: 0.72rem 0.9rem;
   }
   .sampleBtn {
-    font-size: 0.82rem;
-    padding: 0.55rem 0.8rem;
+      font-size: 0.82rem;
+      padding: 0.55rem 0.8rem;
   }
   .chatPromptBar input {
-    padding-right: 2.7rem;
-    font-size: 0.9rem;
+      padding-right: 2.7rem;
+      font-size: 0.9rem;
   }
   .chatSendBtn {
-    width: 40px;
-    height: 40px;
-    right: 0.3rem;
+      width: 40px;
+      height: 40px;
+      right: 0.3rem;
   }
   .chatResponseBox {
-    height: 150px;
+      height: 150px;
   }
   .resultImg {
-    block-size: 200px;
+      block-size: 200px;
   }
 }
 
-/* ---------- Motion/Accessibility ---------- */
+/* =========================================
+ MOTION / ACCESSIBILITY
+========================================= */
 @media (prefers-reduced-motion: reduce) {
   * {
-    transition: none !important;
-    animation: none !important;
+      transition: none !important;
+      animation: none !important;
   }
 }

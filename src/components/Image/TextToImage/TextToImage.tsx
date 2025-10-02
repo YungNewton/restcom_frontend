@@ -1,8 +1,9 @@
 // src/components/Image/TextToImage/TextToImage.tsx
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import type { GeneralSettingsState } from '../Right/Settings/Settings'
 import {
-  Sparkles, Info, ChevronDown, ChevronUp, CircleStop, Send, RefreshCcw, Copy, CornerDownLeft, Loader2, X
+  Sparkles, Info, ChevronDown, ChevronUp, CircleStop, Send, RefreshCcw, Copy,
+  CornerDownLeft, Loader2, X, ChevronLeft, ChevronRight, Download
 } from 'lucide-react'
 import styles from './TextToImage.module.css'
 import { toast } from 'react-hot-toast'
@@ -34,17 +35,13 @@ type Slot = {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-const ENGINE_BASE_URL = import.meta.env.VITE_IMAGE_ENGINE_API_BASE_URL // used only for “Start Image Engine” call
+const ENGINE_BASE_URL = import.meta.env.VITE_IMAGE_ENGINE_API_BASE_URL
 
-// ✅ Routes proxied by your backend (use `api` like VoiceCloning does)
 const QUEUE_ROUTE = '/image/image/generate/'
 const STATUS_ROUTE = (taskId: string) => `/image/image/task-status/${taskId}`
-
-// ⚠️ These likely live on the engine service (not your main backend)
 const START_ENGINE_ROUTE = '/images/start-runpod/'
 const CANCEL_ROUTE = '/cancel-task/'
 
-// ---------- utils ----------
 function normalizeBase(url?: string) {
   if (!url) return ''
   return url.replace(/\/+$/, '')
@@ -68,26 +65,46 @@ const PROMPT_TEMPLATES = [
   'Editorial product lay-flat, soft gradient backdrop, diffused light.',
 ]
 
-// ---------- Preview Modal ----------
+/* ───────── Preview Modal (carousel) ───────── */
 function PreviewModal({
   open,
   onClose,
-  slot,
+  slots,
+  index,
+  setIndex,
 }: {
   open: boolean
   onClose: () => void
-  slot: Slot | null
+  slots: Slot[]
+  index: number
+  setIndex: (i: number) => void
 }) {
-  if (!open || !slot) return null
-  const { url, meta } = slot
-  const { seed, steps, cfg, width, height, format } = meta
+  if (!open || !slots.length) return null
 
-  // Scale image by its intended size so bigger canvases appear bigger.
-  // Base scale around a 768px width reference, but clamp to viewport.
+  const safeIndex = Math.min(Math.max(0, index), slots.length - 1)
+  const slot = slots[safeIndex]
+  const { url, meta } = slot || {}
+  const { seed, steps, cfg, width, height, format } = meta || {}
+
+  // scale preview loosely by requested size
   const base = 768
   const scale = Math.min(1.6, Math.max(0.6, (width ?? base) / base))
   const maxW = Math.min(window.innerWidth * 0.92, (width ?? base) * scale)
   const maxH = Math.min(window.innerHeight * 0.88, (height ?? base) * scale)
+
+  const go = useCallback((dir: number) => {
+    setIndex((safeIndex + dir + slots.length) % slots.length)
+  }, [safeIndex, setIndex, slots.length])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowLeft') go(-1)
+      if (e.key === 'ArrowRight') go(1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [go, onClose])
 
   return (
     <div className={styles.modalBackdrop} onClick={onClose}>
@@ -100,19 +117,69 @@ function PreviewModal({
       >
         <div className={styles.modalHeader}>
           <h3 className={styles.modalTitle}>Preview</h3>
-          <button className={styles.iconBtn} onClick={onClose} aria-label="Close preview" type="button">
-            <X size={18} />
-          </button>
+          <div className={styles.modalHeaderRight}>
+            <span className={styles.modalCounter}>{safeIndex + 1} / {slots.length}</span>
+            <button className={styles.iconBtn} onClick={onClose} aria-label="Close preview" type="button">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className={styles.modalBody}>
           <div className={styles.modalImageWrap}>
             {url ? (
-              <img src={url} alt="Generated" className={styles.modalImg} />
+              <>
+                <img src={url} alt="Generated" className={styles.modalImg} />
+                {slots.length > 1 && (
+                  <>
+                    <button
+                      className={`${styles.carouselBtn} ${styles.carouselBtnLeft}`}
+                      onClick={() => go(-1)}
+                      aria-label="Previous"
+                      type="button"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <button
+                      className={`${styles.carouselBtn} ${styles.carouselBtnRight}`}
+                      onClick={() => go(1)}
+                      aria-label="Next"
+                      type="button"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </>
+                )}
+              </>
             ) : (
               <div className={styles.noPreview}>No image</div>
             )}
           </div>
+          {/* Thumbnails (preview-in-preview) */}
+          {slots.length > 1 && (
+            <div className={styles.thumbsRow} role="tablist" aria-label="Preview thumbnails">
+              {slots.map((s, i) => (
+                <button
+                  key={s.taskId}
+                  className={`${styles.thumb} ${i === safeIndex ? styles.thumbActive : ''}`}
+                  onClick={() => setIndex(i)}
+                  type="button"
+                  role="tab"
+                  aria-selected={i === safeIndex}
+                  aria-label={`Show image ${i + 1} of ${slots.length}`}
+                  disabled={!s.url}
+                  title={s.url ? `Open ${i + 1}/${slots.length}` : 'Generating…'}
+                >
+                  {s.url ? (
+                    <img src={s.url} alt={`thumbnail ${i + 1}`} />
+                  ) : (
+                    <div className={styles.thumbSkeleton} />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
 
           <div className={styles.metaGrid}>
             <div className={styles.metaCard}>
@@ -180,7 +247,7 @@ export default function TextToImage({ engineOnline, settings }: Props) {
 
   // preview
   const [previewOpen, setPreviewOpen] = useState(false)
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null)
+  const [previewIndex, setPreviewIndex] = useState<number>(0)
 
   // websockets
   const wsChatRef = useRef<WebSocket | null>(null)
@@ -191,6 +258,12 @@ export default function TextToImage({ engineOnline, settings }: Props) {
   const negativeWordCount = useMemo(() => countWords(negative), [negative])
   const CHAR_SOFT_LIMIT = 1000
   const overLimit = prompt.length > CHAR_SOFT_LIMIT
+
+  // Only successful slots for preview & download
+  const doneSlots = useMemo(
+    () => slots.filter(s => s.status === 'SUCCESS' && !!s.url),
+    [slots]
+  )
 
   // controllers + revoke
   const pollControllersRef = useRef<Record<string, AbortController>>({})
@@ -211,7 +284,17 @@ export default function TextToImage({ engineOnline, settings }: Props) {
     }
   }, [])
 
-  // ---------------- ENGINE START ----------------
+  /* stop spinner/cancel once ALL slots are terminal */
+  useEffect(() => {
+    if (!isGenerating || slots.length === 0) return
+    const allDone = slots.every(s => s.status === 'SUCCESS' || s.status === 'FAILURE')
+    if (allDone) {
+      setIsGenerating(false)
+      stopPollingRef.current = false
+    }
+  }, [slots, isGenerating])
+
+  // ENGINE START
   const handleStartEngine = async () => {
     if (!API_BASE_URL) {
       toast.error('API base URL not set')
@@ -238,10 +321,9 @@ export default function TextToImage({ engineOnline, settings }: Props) {
     }
   }
 
-  // small helper
   const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-  // ---------------- POLLING A SINGLE TASK ----------------
+  // POLL SINGLE
   const pollSingle = async (taskId: string, slotIndex: number) => {
     try {
       while (!stopPollingRef.current) {
@@ -257,7 +339,6 @@ export default function TextToImage({ engineOnline, settings }: Props) {
         if (res.ok && ct.startsWith('image/')) {
           const blob = await res.blob()
           const url = URL.createObjectURL(blob)
-
           setSlots(prev => {
             const next = [...prev]
             const old = next[slotIndex]?.url
@@ -265,12 +346,10 @@ export default function TextToImage({ engineOnline, settings }: Props) {
             next[slotIndex] = { ...next[slotIndex], status: 'SUCCESS', url }
             return next
           })
-
           delete pollControllersRef.current[taskId]
           return
         }
 
-        // else JSON with state
         let data: any = null
         try { data = await res.json() } catch {}
 
@@ -285,7 +364,6 @@ export default function TextToImage({ engineOnline, settings }: Props) {
           return
         }
 
-        // advance spinner
         setSlots(prev => {
           const next = [...prev]
           if (next[slotIndex]?.status === 'PENDING') {
@@ -307,10 +385,10 @@ export default function TextToImage({ engineOnline, settings }: Props) {
     }
   }
 
-  // ---------------- QUEUE GENERATION ----------------
+  // QUEUE
   const handleGenerate = async () => {
+    // toggle → Cancel
     if (isGenerating) {
-      // Toggle behavior: this is now Cancel
       handleCancelGenerate()
       return
     }
@@ -322,11 +400,9 @@ export default function TextToImage({ engineOnline, settings }: Props) {
     setIsGenerating(true)
     stopPollingRef.current = false
 
-    // Clear old
     revokeAll(urlsRef.current)
     setSlots([])
 
-    // Build payload
     const w = settings?.width ?? 768
     const h = settings?.height ?? 1024
     const steps = settings?.steps ?? 28
@@ -359,23 +435,21 @@ export default function TextToImage({ engineOnline, settings }: Props) {
       }
       const data = await res.json()
 
-      // Prepare slots (store metadata immediately)
       if (Array.isArray(data?.task_ids) && data.task_ids.length) {
-        const metas: TaskMeta[] = (Array.isArray(data?.tasks) ? data.tasks : data.task_ids.map((tid: string) => ({ task_id: tid })))
-          .map((t: any, i: number) => ({
-            taskId: t?.task_id || data.task_ids[i],
-            seed: typeof t?.seed === 'number' ? t.seed : (seed as number | undefined),
-            steps: typeof t?.num_inference_steps === 'number' ? t.num_inference_steps : steps,
-            cfg: typeof t?.guidance_scale === 'number' ? t.guidance_scale : cfg,
-            width: w,
-            height: h,
-            format,
-          }))
+        const metas: TaskMeta[] =
+          (Array.isArray(data?.tasks) ? data.tasks : data.task_ids.map((tid: string) => ({ task_id: tid })))
+            .map((t: any, i: number) => ({
+              taskId: t?.task_id || data.task_ids[i],
+              seed: typeof t?.seed === 'number' ? t.seed : (seed as number | undefined),
+              steps: typeof t?.num_inference_steps === 'number' ? t.num_inference_steps : steps,
+              cfg: typeof t?.guidance_scale === 'number' ? t.guidance_scale : cfg,
+              width: w,
+              height: h,
+              format,
+            }))
 
         const initialSlots: Slot[] = metas.map(m => ({ taskId: m.taskId, status: 'PENDING', url: undefined, meta: m }))
         setSlots(initialSlots)
-
-        // Start polling each slot
         metas.forEach((m, idx) => pollSingle(m.taskId, idx))
       } else if (data?.task_id) {
         const m: TaskMeta = {
@@ -398,11 +472,10 @@ export default function TextToImage({ engineOnline, settings }: Props) {
     }
   }
 
-  // ---------------- CANCEL GENERATION ----------------
+  // CANCEL
   const handleCancelGenerate = async () => {
     stopPollingRef.current = true
 
-    // cancel engine tasks (optional)
     if (ENGINE_BASE_URL && slots.length) {
       for (const s of slots) {
         try {
@@ -420,7 +493,7 @@ export default function TextToImage({ engineOnline, settings }: Props) {
     toast('Generation cancelled.')
   }
 
-  // ——— Chat / Refine helpers (unchanged) ———
+  // Chat / Refine helpers (unchanged) …
   function makeWsUrl(path: string) {
     try {
       const base = API_BASE_URL || window.location.origin
@@ -562,7 +635,62 @@ export default function TextToImage({ engineOnline, settings }: Props) {
   }
   const applyTemplate = (t: string) => setPrompt(t)
 
-  // ---------------- UI ----------------
+  /* one download at bottom: single or zip (dynamic import) */
+  const handleDownloadAll = async () => {
+    const done = slots.filter(s => s.status === 'SUCCESS' && s.url)
+    if (done.length === 0) return
+
+    // single file → just trigger
+    if (done.length === 1) {
+      const s = done[0]
+      const a = document.createElement('a')
+      a.href = s.url!
+      const nameSeed = s.meta.seed ?? 'image'
+      a.download = `krea_${nameSeed}.${(s.meta.format || 'png')}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      return
+    }
+
+    // multiple → zip
+    try {
+      const { default: JSZip } = await import('jszip')
+      const zip = new JSZip()
+      let idx = 1
+      for (const s of done) {
+        const resp = await fetch(s.url!)
+        const blob = await resp.blob()
+        const seedName = s.meta.seed ?? idx
+        const ext = (s.meta.format || 'png')
+        zip.file(`krea_${seedName}.${ext}`, blob)
+        idx++
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(zipBlob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `krea_batch_${Date.now()}.zip`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) {
+      // fallback: open all
+      toast.error('Zip failed; downloading individually.')
+      for (const s of done) {
+        const a = document.createElement('a')
+        a.href = s.url!
+        const nameSeed = s.meta.seed ?? 'image'
+        a.download = `krea_${nameSeed}.${(s.meta.format || 'png')}`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+      }
+    }
+  }
+
+  // UI
   return (
     <div className={styles.wrap}>
       {/* Prompt */}
@@ -756,7 +884,7 @@ export default function TextToImage({ engineOnline, settings }: Props) {
         )}
       </div>
 
-      {/* Generate / Start */}
+      {/* Generate / Start (single toggle button: Generate ↔ Cancel) */}
       <div className={styles.actionRow}>
         {engineOnline ? (
           <button
@@ -782,8 +910,9 @@ export default function TextToImage({ engineOnline, settings }: Props) {
         <div className={styles.section}>
           <h3 className={styles.sectionHeader}>Results</h3>
 
+          {/* Active/finished grid (no per-tile details; click opens preview) */}
           <div className={styles.resultGrid}>
-            {slots.map((s, i) => {
+            {slots.map((s) => {
               const isLive = s.status === 'PENDING' || s.status === 'RUNNING'
               const failed = s.status === 'FAILURE'
               return (
@@ -791,15 +920,18 @@ export default function TextToImage({ engineOnline, settings }: Props) {
                   key={s.taskId}
                   className={`${styles.resultCell} ${isLive ? styles.live : ''} ${failed ? styles.failed : ''}`}
                   onClick={() => {
-                    if (s.url) {
-                      setPreviewIndex(i)
+                    if (!s.url) return
+                    // map to index within doneSlots (so carousel skips empties/failures)
+                    const doneIdx = doneSlots.findIndex(ds => ds.taskId === s.taskId)
+                    if (doneIdx >= 0) {
+                      setPreviewIndex(doneIdx)
                       setPreviewOpen(true)
                     }
                   }}
                   role="button"
-                  aria-label={s.url ? 'Open preview' : 'Generating…'}
+                  aria-label={s.url ? 'Open preview' : (failed ? 'Failed' : 'Generating…')}
                 >
-                  {/* Active bg shimmer while generating */}
+                  {/* Live shimmer while generating */}
                   {!s.url && !failed && (
                     <div className={styles.activeBg}>
                       <div className={styles.pulse} />
@@ -807,41 +939,38 @@ export default function TextToImage({ engineOnline, settings }: Props) {
                   )}
 
                   {/* Failure state */}
-                  {failed && (
-                    <div className={styles.failedNote}>Failed</div>
-                  )}
+                  {failed && <div className={styles.failedNote}>Failed</div>}
 
                   {/* Image once done */}
-                  {s.url && (
-                    <>
-                      <img src={s.url} className={styles.resultImg} alt={`Result ${i + 1}`} />
-                      <div className={styles.resultMetaMini}>
-                        <span title="Seed">Seed: {s.meta.seed ?? '—'}</span>
-                        <span title="Steps">Steps: {s.meta.steps ?? '—'}</span>
-                        <span title="CFG">CFG: {s.meta.cfg ?? '—'}</span>
-                      </div>
-                      <a
-                        className={styles.downloadLink}
-                        href={s.url}
-                        download={`krea_${s.meta.seed ?? i + 1}.${(s.meta.format || 'png')}`}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        Download
-                      </a>
-                    </>
-                  )}
+                  {s.url && <img src={s.url} className={styles.resultImg} alt="Result" />}
                 </div>
               )
             })}
           </div>
+
+          {/* Single bottom download (single file or ZIP for many) */}
+          {doneSlots.length > 0 && (
+            <div className={styles.downloadBox}>
+              <a
+                href="#"
+                className={styles.downloadLink}
+                onClick={(e) => { e.preventDefault(); handleDownloadAll(); }}
+              >
+                <Download size={16} />
+                Download{doneSlots.length > 1 ? ' all (.zip)' : ''}
+              </a>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Preview modal */}
+      {/* Preview modal (carousel over only completed images) */}
       <PreviewModal
-        open={previewOpen}
+        open={previewOpen && doneSlots.length > 0}
         onClose={() => setPreviewOpen(false)}
-        slot={previewIndex != null ? slots[previewIndex] : null}
+        slots={doneSlots}
+        index={Math.min(Math.max(0, previewIndex), Math.max(0, doneSlots.length - 1))}
+        setIndex={setPreviewIndex}
       />
     </div>
   )

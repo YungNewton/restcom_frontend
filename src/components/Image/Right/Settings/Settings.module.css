@@ -12,6 +12,11 @@
   --input-bg:#1f1f1f;
   --input-border:#3a3a3a;
   --input-border-hover:#4a4a4a;
+
+  /* Tooltip CSS variables (runtime-updated from JS) */
+  --tt-left: 50vw;
+  --tt-top: 0px;
+  --tt-shift: 0px; /* horizontal nudge for small screens */
 }
 
 /* ---------- Layout ---------- */
@@ -23,6 +28,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+
+  /* Optional: lets children use cqi if needed */
+  container-type: inline-size;
 }
 
 .wrap::before{ content: none; }
@@ -145,8 +153,135 @@
   flex-shrink:0;
 }
 
+/* --- label + tooltip row --- */
+.labelRow{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+
+/* tiny help icon */
+.helpIcon{
+  color: var(--fg-dim);
+  opacity:.95;
+  display:block;
+}
+.helpIcon:hover{ color:#fff; }
+
+/* ---------- Tooltip (responsive, never escapes screen) ---------- */
+.tooltipWrapper{
+  position:relative;
+  display:inline-flex;
+  isolation:isolate;
+  outline:none;
+}
+
+/* Hide by default; show on hover/focus */
+.tooltipWrapper::after,
+.tooltipWrapper::before{
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .16s ease, transform .16s ease;
+}
+
+/* Balloon */
+.tooltipWrapper::after{
+  content: attr(data-tooltip);
+  position: fixed;                    /* use viewport coordinates */
+  left: var(--tt-left);
+  top: var(--tt-top);
+  transform: translate(calc(-50% + var(--tt-shift)), calc(-100% - 10px)); /* default = top */
+
+  padding:8px 10px;
+  background:#111;
+  color:#fff;
+  border:1px solid #2b2b2b;
+  border-radius:8px;
+  font-size:.78rem;
+  line-height:1.25;
+  z-index: 999;
+
+  /* Wrap long text gracefully */
+  white-space: normal;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  hyphens:auto;
+  text-wrap:pretty;
+
+  /* Width constraints (panel-ish yet viewport-safe) */
+  max-inline-size: min(36rem, 90vw);
+  min-inline-size: 18ch;
+
+  /* Tall tips scroll instead of escaping */
+  max-block-size: min(40vh, 60vb);
+  overflow:auto;
+
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
+
+/* Arrow */
+.tooltipWrapper::before{
+  content:'';
+  position: fixed;
+  left: var(--tt-left);
+  top: var(--tt-top);
+  width:10px;
+  height:10px;
+  transform: translate(calc(-50% + var(--tt-shift)), -6px) rotate(45deg); /* default = top */
+  background:#111;
+  border-left:1px solid #2b2b2b;
+  border-top:1px solid #2b2b2b;
+  z-index: 1000;
+}
+
+/* Bottom side swap (also include the shift) */
+.tooltipWrapper[data-side="bottom"]::after{
+  transform: translate(calc(-50% + var(--tt-shift)), 10px); /* place below the icon */
+}
+.tooltipWrapper[data-side="bottom"]::before{
+  transform: translate(calc(-50% + var(--tt-shift)), 6px) rotate(45deg);
+  /* draw opposite borders to keep the seam clean */
+  border-left:none;
+  border-top:none;
+  border-right:1px solid #2b2b2b;
+  border-bottom:1px solid #2b2b2b;
+}
+
+/* Show on hover or keyboard focus */
+.tooltipWrapper:hover::after,
+.tooltipWrapper:focus-visible::after,
+.tooltipWrapper:hover::before,
+.tooltipWrapper:focus-visible::before{
+  opacity:1;
+}
+
 /* ---------- Responsive tweaks ---------- */
-@media (max-width: 768px){
+@media (max-width: 900px){
   .selectorText{ font-size:.85rem; }
   .dropdownItem{ font-size:.85rem; padding:.5rem .9rem; }
+
+  /* Lean right a bit; modestly cap width */
+  .tooltipWrapper{ --tt-shift: 8vw; }
+  .tooltipWrapper::after{ max-inline-size: min(32rem, 86vw); }
+}
+
+/* below 700px: lean more right, slightly narrower bubble */
+@media (max-width: 700px){
+  .tooltipWrapper{ --tt-shift: 12vw; }
+  .tooltipWrapper::after{ max-inline-size: min(30rem, 84vw); }
+}
+
+/* below 560px: stronger lean + smaller type for comfort */
+@media (max-width: 560px){
+  .tooltipWrapper{ --tt-shift: 14vw; }
+  .tooltipWrapper::after{
+    font-size:.74rem;
+    max-inline-size: min(28rem, 82vw);
+  }
+}
+
+/* below 420px: maximum lean while keeping margins safe */
+@media (max-width: 420px){
+  .tooltipWrapper{ --tt-shift: 18vw; }
+  .tooltipWrapper::after{ max-inline-size: min(26rem, 80vw); }
 }
