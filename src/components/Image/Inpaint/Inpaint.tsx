@@ -33,13 +33,16 @@ type Slot = {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-const ENGINE_BASE_URL = import.meta.env.VITE_IMAGE_ENGINE_API_BASE_URL
+const ENGINE_BASE_URL = import.meta.env.VITE_IMAGE_FILL_ENGINE_API_BASE_URL
+
+const BRANCHES = ['krea', 'kontext', 'fill'] as const
+type Branch = typeof BRANCHES[number]
 
 // Backend routes (same “/image/…” stack you showed)
 const QUEUE_ROUTE_INPAINT = '/image/image/generate/'
 const STATUS_ROUTE = (taskId: string) => `/image/image/task-status/${taskId}`
-const CANCEL_ROUTE = '/cancel-task/'
-const START_ENGINE_ROUTE = '/images/start-runpod/'
+const CANCEL_ROUTE = '/image/image/cancel/'
+const START_ENGINE_ROUTE = (branch: Branch) => `/images/${branch}/start-runpod/`
 
 function normalizeBase(url?: string) {
   if (!url) return ''
@@ -371,29 +374,37 @@ export default function Inpaint({ engineOnline, settings }: Props) {
   }
 
   // --- engine ---
-  const handleStartEngine = async () => {
-    const t = toast.loading('Starting Image Engine...')
-    try {
-      const res = await axios.post(`${normalizeBase(API_BASE_URL)}${START_ENGINE_ROUTE}`)
-      toast.dismiss(t)
-      const statusText = res.data?.status
-      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(statusText)) {
-        toast.success('Image Engine is starting.')
-      } else if (statusText === 'HEALTHY') {
-        toast.success('Image Engine is already live.')
-      } else {
-        toast.error(`Engine status: ${statusText || 'Unknown'}`)
-      }
-    } catch (err: any) {
-      toast.dismiss(t)
-      const msg =
-        err?.response?.data?.error ||
-        err?.response?.data?.detail ||
-        err?.message ||
-        'Failed to start Image Engine.'
-      toast.error(msg)
-    }
+  // ENGINE START — start only the fill branch
+const handleStartEngine = async () => {
+  if (!API_BASE_URL) {
+    toast.error('API base URL not set')
+    return
   }
+  const t = toast.loading('Starting Inpaint engine…')
+  try {
+    const { data } = await axios.post(
+      `${normalizeBase(API_BASE_URL)}${START_ENGINE_ROUTE('fill')}`
+    )
+    toast.dismiss(t)
+    const s = data?.status
+    if (['RUNNING', 'STARTING', 'REQUESTED'].includes(String(s))) {
+      toast.success('Inpaint Engine is starting.')
+    } else if (s === 'HEALTHY') {
+      toast.success('Inpaint Engine is already live.')
+    } else {
+      toast.error(`Engine status: ${s || 'Unknown'}`)
+    }
+  } catch (err: any) {
+    toast.dismiss(t)
+    const msg =
+      err?.response?.data?.error ||
+      err?.response?.data?.detail ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Failed to start Inpaint engine.'
+    toast.error(msg)
+  }
+}
 
   // --- uploads ---
   const onPickRef = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -692,19 +703,29 @@ export default function Inpaint({ engineOnline, settings }: Props) {
     }
   }
 
+  // CANCEL
   const handleCancelGenerate = async () => {
+    // stop local polling immediately
     stopPollingRef.current = true
 
+    // tell server to hard-cancel each in-flight task (ultimate cancel route)
     if (ENGINE_BASE_URL && slots.length) {
       for (const s of slots) {
         try {
           const fd = new FormData()
           fd.append('task_id', s.taskId)
-          await fetch(`${normalizeBase(ENGINE_BASE_URL)}${CANCEL_ROUTE}`, { method: 'POST', body: fd })
-        } catch {}
+          fd.append('hard_kill', 'true') // use SIGKILL path on server
+          await fetch(`${normalizeBase(ENGINE_BASE_URL)}${CANCEL_ROUTE}`, {
+            method: 'POST',
+            body: fd,
+          })
+        } catch {
+          /* best-effort */
+        }
       }
     }
 
+    // abort all client polls
     try { Object.values(pollControllersRef.current).forEach(c => c.abort()) } catch {}
     pollControllersRef.current = {}
 

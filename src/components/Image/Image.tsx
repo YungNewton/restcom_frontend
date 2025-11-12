@@ -1,5 +1,5 @@
 // src/components/Image/Image.tsx
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import NavTabs from '../NavTabs/NavTabs'
 import styles from './Image.module.css'
 import { toast } from 'react-hot-toast'
@@ -15,9 +15,37 @@ type ActiveTab = 't2i' | 'i2i' | 'inpaint'
 type RightTab = 'settings' | 'loraLibrary'
 const MAX_SELECTED = 3
 
+const TAB_TO_BRANCH: Record<ActiveTab, 'krea' | 'kontext' | 'fill'> = {
+  t2i: 'krea',
+  i2i: 'kontext',
+  inpaint: 'fill',
+}
+
+const BRANCH_TO_ENGINE_LABEL: Record<'krea' | 'kontext' | 'fill', string> = {
+  krea: 'Image engine',
+  kontext: 'Img-to-Img engine',
+  fill: 'Inpaint engine',
+}
+
 const Image = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('t2i')
-  const [engineOnline, setEngineOnline] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  // Keep per-branch online state so switching tabs feels instant (no flicker)
+  const [onlineByBranch, setOnlineByBranch] = useState<Record<'krea' | 'kontext' | 'fill', boolean>>({
+    krea: false,
+    kontext: false,
+    fill: false,
+  })
+  const branch = TAB_TO_BRANCH[activeTab]
+  const engineOnline = onlineByBranch[branch]
+
+  // Remember previous online state per-branch to control toast transitions
+  const prevOnlineRef = useRef<Record<'krea' | 'kontext' | 'fill', boolean>>({
+    krea: false,
+    kontext: false,
+    fill: false,
+  })
 
   // Track selected LoRAs from the right-side library (id + strength)
   const [activeLoras, setActiveLoras] = useState<Array<{ id: string; strength: number }>>([])
@@ -51,25 +79,69 @@ const Image = () => {
     outFormat: 'png',
   })
 
+  // Faster-feeling tab switch + robust polling:
+  // - Abort in-flight fetch immediately on tab change (no stale updates)
+  // - Cache per-branch online state so the badge/UX updates instantly
+  // - Fire toast with friendly engine names when branch goes from offline -> online
   useEffect(() => {
-    // Reuse voice SSE for now; swap if an /image/status/stream exists
-    const es = new EventSource(`${API_BASE}/image/status/stream`)
-    es.onmessage = (event) => {
+    if (!API_BASE) return
+
+    const base = API_BASE.replace(/\/+$/, '')
+    const controller = new AbortController()
+    let cancelled = false
+    let tick: number | undefined
+
+    const poll = async () => {
       try {
-        const data = JSON.parse(event.data)
-        const isOnline = !!data.online
-        setEngineOnline(isOnline)
-        if (isOnline) toast.success('AI Engine is live.')
-      } catch (e) {
-        console.error('SSE parse error:', e)
+        const res = await fetch(`${base}/images/${branch}/runpod-status/`, {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        })
+        if (!res.ok) throw new Error(String(res.status))
+        const data = await res.json()
+        const isOnline = !!data?.online
+
+        // update per-branch online state without clobbering others
+        setOnlineByBranch(prev => {
+          if (prev[branch] === isOnline) return prev
+          const next = { ...prev, [branch]: isOnline }
+          return next
+        })
+
+        // toast only on transition offline -> online for THIS branch
+        const wasOnline = prevOnlineRef.current[branch]
+        if (!wasOnline && isOnline) {
+          const label = BRANCH_TO_ENGINE_LABEL[branch]
+          toast.success(`${label} is live.`)
+        }
+        prevOnlineRef.current[branch] = isOnline
+      } catch (err) {
+        // treat as offline only if not aborted
+        if (!controller.signal.aborted) {
+          setOnlineByBranch(prev => {
+            if (prev[branch] === false) return prev
+            const next = { ...prev, [branch]: false }
+            return next
+          })
+          prevOnlineRef.current[branch] = false
+        }
+      } finally {
+        if (!cancelled) {
+          tick = window.setTimeout(poll, 2500) as unknown as number
+        }
       }
     }
-    es.onerror = () => {
-      es.close()
-      setEngineOnline(false)
+
+    // immediate poll on tab change for snappier feedback
+    poll()
+
+    return () => {
+      cancelled = true
+      if (tick) window.clearTimeout(tick)
+      controller.abort()
     }
-    return () => es.close()
-  }, [])
+  }, [branch, API_BASE])
 
   // If we came from the main LoRA Library's "Use" button, open the LoRA tab
   useEffect(() => {
@@ -86,19 +158,25 @@ const Image = () => {
         <div className={styles.tabNav}>
           <button
             className={`${styles.tab} ${activeTab === 't2i' ? styles.active : ''}`}
-            onClick={() => setActiveTab('t2i')}
+            onClick={() => startTransition(() => setActiveTab('t2i'))}
+            disabled={isPending}
+            type="button"
           >
             Text to Image
           </button>
           <button
             className={`${styles.tab} ${activeTab === 'i2i' ? styles.active : ''}`}
-            onClick={() => setActiveTab('i2i')}
+            onClick={() => startTransition(() => setActiveTab('i2i'))}
+            disabled={isPending}
+            type="button"
           >
             Image to Image
           </button>
           <button
             className={`${styles.tab} ${activeTab === 'inpaint' ? styles.active : ''}`}
-            onClick={() => setActiveTab('inpaint')}
+            onClick={() => startTransition(() => setActiveTab('inpaint'))}
+            disabled={isPending}
+            type="button"
           >
             Inpaint
           </button>
@@ -106,7 +184,12 @@ const Image = () => {
 
         <div className={`${styles.engineStatus} ${engineOnline ? styles.onlineStatus : ''}`}>
           <div className={`${styles.statusDot} ${engineOnline ? styles.online : styles.offline}`}></div>
-          <span>Image Engine {engineOnline ? 'Online' : 'Offline'}</span>
+          <span>
+            {
+              // dynamic label to match the active tab
+              `${BRANCH_TO_ENGINE_LABEL[branch]} ${engineOnline ? 'Online' : 'Offline'}`
+            }
+          </span>
         </div>
       </div>
 
