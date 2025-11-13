@@ -14,7 +14,8 @@ import rehypeSanitize from 'rehype-sanitize'
 
 type Props = {
   engineOnline: boolean
-  settings?: GeneralSettingsState // optional; steps/cfg/batch/seed/outFormat if provided
+  settings?: GeneralSettingsState
+  onEngineOnlineChange?: (b: 'krea' | 'kontext' | 'fill', online: boolean) => void
 }
 
 type TaskMeta = {
@@ -180,7 +181,7 @@ function PreviewModal({
   )
 }
 
-export default function Inpaint({ engineOnline, settings }: Props) {
+export default function Inpaint({ engineOnline, settings, onEngineOnlineChange }: Props) {
   // Reference image
   const [refFile, setRefFile] = useState<File | null>(null)
   const [refPreview, setRefPreview] = useState<string | null>(null)
@@ -218,6 +219,7 @@ export default function Inpaint({ engineOnline, settings }: Props) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [slots, setSlots] = useState<Slot[]>([])
   const stopPollingRef = useRef(false)
+  const cancellingRef = useRef(false)
   const pollControllersRef = useRef<Record<string, AbortController>>({})
   const urlsRef = useRef<string[]>([])
   useEffect(() => { urlsRef.current = slots.map(s => s.url || '').filter(Boolean) }, [slots])
@@ -391,6 +393,7 @@ const handleStartEngine = async () => {
       toast.success('Inpaint Engine is starting.')
     } else if (s === 'HEALTHY') {
       toast.success('Inpaint Engine is already live.')
+      onEngineOnlineChange?.('fill', true)      // mark Online immediately
     } else {
       toast.error(`Engine status: ${s || 'Unknown'}`)
     }
@@ -705,33 +708,31 @@ const handleStartEngine = async () => {
 
   // CANCEL
   const handleCancelGenerate = async () => {
-    // stop local polling immediately
+    if (cancellingRef.current) return
+    cancellingRef.current = true
+  
+    // immediate UI feedback + stop local work right away
     stopPollingRef.current = true
-
-    // tell server to hard-cancel each in-flight task (ultimate cancel route)
-    if (ENGINE_BASE_URL && slots.length) {
-      for (const s of slots) {
-        try {
-          const fd = new FormData()
-          fd.append('task_id', s.taskId)
-          fd.append('hard_kill', 'true') // use SIGKILL path on server
-          await fetch(`${normalizeBase(ENGINE_BASE_URL)}${CANCEL_ROUTE}`, {
-            method: 'POST',
-            body: fd,
-          })
-        } catch {
-          /* best-effort */
-        }
-      }
-    }
-
-    // abort all client polls
     try { Object.values(pollControllersRef.current).forEach(c => c.abort()) } catch {}
     pollControllersRef.current = {}
-
     setIsGenerating(false)
-    toast('Generation cancelled.')
-  }
+    toast.success('Cancellation started.')
+  
+    // tell server to hard-cancel (fire-and-forget, parallel)
+    if (ENGINE_BASE_URL && slots.length) {
+      const base = normalizeBase(ENGINE_BASE_URL)
+      const reqs = slots.map(s => {
+        const fd = new FormData()
+        fd.append('task_id', s.taskId)
+        fd.append('hard_kill', 'true')
+        return fetch(`${base}${CANCEL_ROUTE}`, { method: 'POST', body: fd }).catch(() => null)
+      })
+      // don’t block UI; let them resolve in the background
+      void Promise.allSettled(reqs)
+    }
+  
+    cancellingRef.current = false
+  }  
 
   // --- refine ---
   const WS_PATHS = {
