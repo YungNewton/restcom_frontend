@@ -27,22 +27,22 @@ export default function LoraLibraryPage() {
     }
   }, [])
 
-  const handleAdd = useCallback(
-    async ({ name, type, file, url, tags }: { name: string; type: NonNullable<Lora['type']>; file?: File; url?: string; tags: string[] }) => {
-      if (file) {
-        const fd = new FormData()
-        fd.append('name', name)
-        fd.append('type', type)
-        fd.append('tags', JSON.stringify(tags))
-        fd.append('file', file)
-        await axios.post(`${API_BASE}/loras/`, fd)
-      } else {
-        await axios.post(`${API_BASE}/loras/`, { name, type, url, tags })
-      }
-      await fetchLoras()
-    },
-    [fetchLoras]
-  )
+  // const handleAdd = useCallback(
+  //   async ({ name, type, file, url, tags }: { name: string; type: NonNullable<Lora['type']>; file?: File; url?: string; tags: string[] }) => {
+  //     if (file) {
+  //       const fd = new FormData()
+  //       fd.append('name', name)
+  //       fd.append('type', type)
+  //       fd.append('tags', JSON.stringify(tags))
+  //       fd.append('file', file)
+  //       await axios.post(`${API_BASE}/loras/`, fd)
+  //     } else {
+  //       await axios.post(`${API_BASE}/loras/`, { name, type, url, tags })
+  //     }
+  //     await fetchLoras()
+  //   },
+  //   [fetchLoras]
+  // )
 
   const handleToggleFavorite = useCallback(
     async (id: string, next: boolean) => {
@@ -94,7 +94,7 @@ export default function LoraLibraryPage() {
               items={items}
               isLoading={loading}
               onRefresh={fetchLoras}
-              onAdd={handleAdd}
+              // onAdd={handleAdd}
               onToggleFavorite={handleToggleFavorite}
               onRename={handleRename}
               onDelete={handleDelete}

@@ -296,13 +296,24 @@
     align-items: baseline;
     justify-content: space-between;
     gap: .6rem;
+    min-inline-size: 0;
   }
   .trainFilename {
     color: #dfe7f3;
     font-size: 0.86rem;
     font-weight: 500;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    max-inline-size: 70%;
+  
+    /* 🔑 let flexbox shrink it instead of forcing the card to grow */
+    flex: 1 1 auto;
+    min-inline-size: 0;
+  
+    /* ellipsis behaviour */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  
+    /* you can keep this or remove it, up to you */
+    /* max-inline-size: 70%; */
   }
   .trainFilesize { color: #9aa5b1; font-size: 0.78rem; }
   .trainCaption {

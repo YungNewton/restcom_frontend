@@ -6,7 +6,8 @@ import {
   Download, RefreshCcw, Grid, List, Info, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import axios from 'axios'
-import AddLoRa from './AddLoRa'
+import { toast } from 'react-hot-toast'
+import AddLoRa, { type AddLoRaPayload } from './AddLoRa'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
@@ -33,13 +34,6 @@ export type LoraLibraryProps = {
   items?: Lora[] // if provided, component becomes "dumb view" over this list
   isLoading?: boolean
   onRefresh?: () => Promise<void> | void
-  onAdd?: (payload: {
-    name: string
-    type: NonNullable<Lora['type']>
-    file?: File
-    url?: string
-    tags: string[]
-  }) => Promise<void> | void
   onToggleFavorite?: (id: string, next: boolean) => Promise<void> | void
   onRename?: (id: string, nextName: string) => Promise<void> | void
   onDelete?: (ids: string[]) => Promise<void> | void
@@ -71,11 +65,13 @@ function timeAgo(iso?: string) {
 type OwnerFilter = 'all' | 'mine' | 'default'
 const MAX_USE = 3
 
+type Branch = 'krea' | 'kontext' | 'fill'
+const BRANCHES: Branch[] = ['krea', 'kontext', 'fill']
+
 export default function LoraLibrary({
   items,
   isLoading,
   onRefresh,
-  onAdd,
   onToggleFavorite,
   onRename,
   onDelete,
@@ -108,8 +104,17 @@ export default function LoraLibrary({
   // gallery state (drawer only)
   const [galleryIndex, setGalleryIndex] = useState(0)
 
-  // engine status (standalone page, independent of Image.tsx)
-  const [engineOnline, setEngineOnline] = useState(false)
+  // engine status per-branch (standalone page)
+  const [engineOnlineByBranch, setEngineOnlineByBranch] = useState<
+    Record<Branch, boolean>
+  >({
+    krea: false,
+    kontext: false,
+    fill: false,
+  })
+
+  // derived: ANY engine online
+  const anyEngineOnline = Object.values(engineOnlineByBranch).some(Boolean)
 
   const allTags = useMemo(() => {
     const s = new Set<string>()
@@ -167,6 +172,7 @@ export default function LoraLibrary({
     } catch (err) {
       console.error('Failed to load LoRAs', err)
       setError('Failed to load LoRAs')
+      toast.error('Failed to load LoRAs')
     } finally {
       setLoading(false)
     }
@@ -179,6 +185,7 @@ export default function LoraLibrary({
 
   async function defaultRefresh() {
     await fetchLoras()
+    toast.success('LoRAs refreshed')
   }
 
   async function defaultToggleFavorite(id: string, next: boolean) {
@@ -188,10 +195,12 @@ export default function LoraLibrary({
         { is_favorite: next },
         { withCredentials: true }
       )
+      toast.success(next ? 'Added to favourites' : 'Removed from favourites')
       // Optionally refresh counts from backend
       fetchLoras()
     } catch (err) {
       console.error('Failed to toggle favorite', err)
+      toast.error('Failed to update favourite')
     }
   }
 
@@ -205,8 +214,10 @@ export default function LoraLibrary({
       setRemoteItems(prev =>
         prev.map(l => (l.id === id ? { ...l, name: nextName } : l))
       )
+      toast.success('LoRA renamed')
     } catch (err) {
       console.error('Failed to rename LoRA', err)
+      toast.error('Failed to rename LoRA')
     }
   }
 
@@ -224,8 +235,10 @@ export default function LoraLibrary({
         )
       }
       setRemoteItems(prev => prev.filter(l => !ids.includes(l.id)))
+      toast.success(ids.length === 1 ? 'LoRA deleted' : 'LoRAs deleted')
     } catch (err) {
       console.error('Failed to delete LoRAs', err)
+      toast.error('Failed to delete LoRA(s)')
     }
   }
 
@@ -239,40 +252,124 @@ export default function LoraLibrary({
       const url = (res.data && (res.data as any).url) as string | undefined
       if (url) {
         window.open(url, '_blank')
+        toast.success('Download started')
       } else {
         console.warn('Download URL not provided by backend yet')
+        toast.error('Download URL not provided')
       }
     } catch (err) {
       console.error('Failed to download LoRA', err)
+      toast.error('Failed to start download')
     }
   }
 
-  async function defaultAdd(payload: {
-    name: string
-    type: NonNullable<Lora['type']>
-    file?: File
-    url?: string
-    tags: string[]
-  }) {
-    try {
-      // For now we ignore file/url here; you’ll later wire this to /upload
-      const res = await axios.post(
-        `${API_BASE_URL}/images/loras/`,
+  // --- Wire AddLoRa modal to backend upload/train views WITH TOASTS ---
+async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean> {
+  if (!API_BASE_URL) {
+    console.error('API base URL not set')
+    toast.error('API base URL not set')
+    return false
+  }
+
+  const base = API_BASE_URL.replace(/\/+$/, '')
+
+  const loadingMsg =
+    payload.mode === 'upload'
+      ? 'Uploading LoRA…'
+      : 'Creating LoRA and starting training…'
+
+  const successMsg =
+    payload.mode === 'upload'
+      ? 'LoRA uploaded successfully'
+      : 'Training started for LoRA'
+
+  const t = toast.loading(loadingMsg)
+
+  try {
+    if (payload.mode === 'upload') {
+      // --- /images/loras/upload/ ---
+      const form = new FormData()
+      form.append('name', payload.name)
+      form.append('type', payload.type)
+
+      payload.tags.forEach(tg => form.append('tags', tg))
+      form.append('file', payload.file, payload.file.name)
+
+      payload.previews?.forEach(p => {
+        form.append('previews', p, p.name)
+      })
+
+      const res = await axios.post<Lora>(
+        `${base}/images/loras/upload/`,
+        form,
+        {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }
+      )
+
+      const created = res.data
+      setRemoteItems(prev => [created, ...prev])
+    } else {
+      // --- Train mode ---
+      const createRes = await axios.post<Lora>(
+        `${base}/images/loras/`,
         {
           name: payload.name,
           type: payload.type,
-          tags: payload.tags
+          tags: payload.tags,
         },
         { withCredentials: true }
       )
-      const created = res.data as Lora
-      setRemoteItems(prev => [created, ...prev])
-    } catch (err) {
-      console.error('Failed to create LoRA', err)
-    }
-  }
 
-  // -------- Engine status polling (standalone, like Image.tsx but simpler) --------
+      const created = createRes.data
+
+      const trainForm = new FormData()
+      if (payload.trigger) trainForm.append('trigger', payload.trigger)
+      trainForm.append('repeat_per_image', String(payload.repeatPerImage))
+      trainForm.append('max_epochs', String(payload.maxEpochs))
+      trainForm.append('estimated_steps', String(payload.estimatedSteps))
+
+      payload.images.forEach((img, idx) => {
+        trainForm.append('images', img.file, img.file.name)
+        if (img.caption) {
+          trainForm.append(`captions[${idx}]`, img.caption)
+        }
+      })
+
+      await axios.post(
+        `${base}/images/loras/${created.id}/train/`,
+        trainForm,
+        {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }
+      )
+
+      setRemoteItems(prev => [created, ...prev])
+    }
+
+    toast.dismiss(t)
+    toast.success(successMsg)
+    return true
+  } catch (err: any) {
+    console.error('Failed to add/train LoRA', err)
+    toast.dismiss(t)
+    const fallback =
+      payload.mode === 'upload'
+        ? 'Failed to upload LoRA'
+        : 'Failed to create/train LoRA'
+    const msg =
+      err?.response?.data?.detail ||
+      err?.response?.data?.error ||
+      err?.message ||
+      fallback
+    toast.error(msg)
+    return false
+  }
+}
+
+  // -------- Engine status polling (standalone, checks ALL branches) --------
   useEffect(() => {
     if (!API_BASE_URL) return
 
@@ -283,17 +380,31 @@ export default function LoraLibrary({
 
     const poll = async () => {
       try {
-        const res = await fetch(`${base}/images/krea/runpod-status/`, {
-          cache: 'no-store',
-          headers: { Accept: 'application/json' },
-          signal: controller.signal,
-        })
-        if (!res.ok) throw new Error(String(res.status))
-        const data = await res.json()
-        setEngineOnline(!!data?.online)
-      } catch {
+        const results = await Promise.all(
+          BRANCHES.map(async (branch) => {
+            try {
+              const res = await fetch(`${base}/images/${branch}/runpod-status/`, {
+                cache: 'no-store',
+                headers: { Accept: 'application/json' },
+                signal: controller.signal,
+              })
+              if (!res.ok) throw new Error(String(res.status))
+              const data = await res.json()
+              return { branch, online: !!data?.online }
+            } catch {
+              return { branch, online: false }
+            }
+          })
+        )
+
         if (!controller.signal.aborted) {
-          setEngineOnline(false)
+          setEngineOnlineByBranch(prev => {
+            const next = { ...prev }
+            for (const r of results) {
+              next[r.branch] = r.online
+            }
+            return next
+          })
         }
       } finally {
         if (!cancelled) {
@@ -325,6 +436,7 @@ export default function LoraLibrary({
     setActiveTags([]) // clear tag filters
     if (onRefresh) {
       onRefresh()
+      toast.success('LoRAs refreshed')
     } else {
       defaultRefresh()
     }
@@ -368,6 +480,7 @@ export default function LoraLibrary({
   async function handleDelete(ids: string[]) {
     if (onDelete) {
       await onDelete(ids)
+      toast.success(ids.length === 1 ? 'LoRA deleted' : 'LoRAs deleted')
     } else {
       await defaultDelete(ids)
     }
@@ -379,7 +492,10 @@ export default function LoraLibrary({
     const ids = Array.from(selected).slice(0, MAX_USE)
     try {
       sessionStorage.setItem('image.selectedLoras', JSON.stringify(ids))
-    } catch {}
+      toast.success('LoRAs applied to Image page')
+    } catch {
+      // ignore; not critical
+    }
     window.location.href = '/image'
   }
 
@@ -410,16 +526,16 @@ export default function LoraLibrary({
       {/* Status pill OUTSIDE the main panel, but inside the page */}
       <div
         className={`${styles.engineStatusInline} ${
-          engineOnline ? styles.onlineStatus : ''
+          anyEngineOnline ? styles.onlineStatus : ''
         }`}
       >
         <span
           className={`${styles.statusDot} ${
-            engineOnline ? styles.online : styles.offline
+            anyEngineOnline ? styles.online : styles.offline
           }`}
         />
         <span className={styles.engineStatusText}>
-          Image engine {engineOnline ? 'Online' : 'Offline'}
+          Image engine {anyEngineOnline ? 'Online' : 'Offline'}
         </span>
       </div>
 
@@ -1012,18 +1128,26 @@ export default function LoraLibrary({
 
         {/* Add Modal (external component) */}
         {addOpen && (
-          <AddLoRa
-            onClose={() => setAddOpen(false)}
-            onSubmit={async payload => {
-              if (onAdd) {
-                await onAdd(payload)
-              } else {
-                await defaultAdd(payload)
-              }
-              setAddOpen(false)
-            }}
-          />
-        )}
+        <AddLoRa
+          onClose={() => setAddOpen(false)}
+          onSubmit={async payload => {
+            const ok = await handleAddLoRaFromModal(payload)
+            if (ok) {
+              setAddOpen(false)   // only close on success
+            }
+            // if !ok: keep modal open, user input is preserved
+          }}
+          branch="krea"
+          engineOnline={engineOnlineByBranch.krea}
+          onEngineOnlineChange={(branch, online) => {
+            setEngineOnlineByBranch(prev => ({
+              ...prev,
+              [branch]: online,
+            }))
+          }}
+        />
+      )}
+
       </div>
     </div>
   )
