@@ -183,12 +183,12 @@ export default function GeneralSettings({ value, onChange }: Props) {
             id={ids.width}
             className={styles.input}
             value={value.width}
-            min={256}
+            min={96}
             max={1536}
             step={16}
             onCommit={(n) => {
               const snapped = Math.round(n / 16) * 16
-              set('width', Math.min(1536, Math.max(256, snapped)))
+              set('width', Math.min(1536, Math.max(96, snapped)))
             }}
           />
         </div>
@@ -199,12 +199,12 @@ export default function GeneralSettings({ value, onChange }: Props) {
             id={ids.height}
             className={styles.input}
             value={value.height}
-            min={256}
+            min={96}
             max={1536}
             step={16}
             onCommit={(n) => {
               const snapped = Math.round(n / 16) * 16
-              set('height', Math.min(1536, Math.max(256, snapped)))
+              set('height', Math.min(1536, Math.max(96, snapped)))
             }}
           />
         </div>

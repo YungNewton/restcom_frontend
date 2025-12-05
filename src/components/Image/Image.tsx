@@ -19,7 +19,7 @@ type RightTab = 'settings' | 'loraLibrary'
 
 const MAX_SELECTED = 3
 
-type Branch = 'krea' | 'kontext' | 'fill'
+export type Branch = 'krea' | 'kontext' | 'fill'
 
 const TAB_TO_BRANCH: Record<ActiveTab, Branch> = {
   t2i: 'krea',
@@ -53,7 +53,7 @@ type TaskMeta = {
   format?: string
 }
 
-type TaskStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILURE'
+type TaskStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILURE' | 'CANCELLED'
 
 export type Slot = {
   branch: Branch
@@ -82,18 +82,18 @@ const Image = () => {
   })
   const engineOnline = onlineByBranch[branch]
 
-  // Allow children to flip a branch online/offline immediately (e.g., after start)
-  const setBranchOnline = useCallback((b: Branch, online: boolean) => {
-    setOnlineByBranch(prev => (prev[b] === online ? prev : { ...prev, [b]: online }))
-    prevOnlineRef.current[b] = online
-  }, [])
-
   // Remember previous online state per-branch to control toast transitions
   const prevOnlineRef = useRef<Record<Branch, boolean>>({
     krea: false,
     kontext: false,
     fill: false,
   })
+
+  // Allow children to flip a branch online/offline immediately (e.g., after start)
+  const setBranchOnline = useCallback((b: Branch, online: boolean) => {
+    setOnlineByBranch(prev => (prev[b] === online ? prev : { ...prev, [b]: online }))
+    prevOnlineRef.current[b] = online
+  }, [])
 
   // Track selected LoRAs from the right-side library (id + strength)
   const [activeLoras, setActiveLoras] = useState<Array<{ id: string; strength: number }>>([])
@@ -135,6 +135,12 @@ const Image = () => {
     fill: [],
   })
 
+  // keep latest slots in a ref so cleanup has an up-to-date snapshot
+  const slotsByBranchRef = useRef(slotsByBranch)
+  useEffect(() => {
+    slotsByBranchRef.current = slotsByBranch
+  }, [slotsByBranch])
+
   const [isGeneratingByBranch, setIsGeneratingByBranch] = useState<Record<Branch, boolean>>({
     krea: false,
     kontext: false,
@@ -148,20 +154,76 @@ const Image = () => {
   // Track blob URLs for cleanup
   const blobUrlsRef = useRef<Set<string>>(new Set())
 
-  // Cleanup on unmount – abort polling + revoke blobs
+    // On unmount / refresh: best-effort cancel all active tasks + cleanup polling & blobs
   useEffect(() => {
+    const cancelAllActiveTasks = () => {
+      const snapshot = slotsByBranchRef.current
+
+      ;(['krea', 'kontext', 'fill'] as Branch[]).forEach(b => {
+        const slots = snapshot[b]
+        if (!slots || !slots.length) return
+
+        const base = getEngineBase(b)
+        if (!base) return
+
+        slots.forEach(s => {
+          // nothing to do for tasks that are already terminal
+          if (
+            s.status === 'SUCCESS' ||
+            s.status === 'FAILURE' ||
+            s.status === 'CANCELLED'
+          ) {
+            return
+          }
+
+          // stop local polling
+          stopPollingRef.current[s.taskId] = true
+          const controller = pollControllersRef.current[s.taskId]
+          if (controller) {
+            try { controller.abort() } catch {}
+            delete pollControllersRef.current[s.taskId]
+          }
+
+          // fire-and-forget backend cancel (hard_kill=true to free GPU)
+          const fd = new FormData()
+          fd.append('task_id', s.taskId)
+          fd.append('hard_kill', 'true')
+
+          fetch(`${base}${CANCEL_ROUTE}`, {
+            method: 'POST',
+            body: fd,
+          }).catch(() => null)
+        })
+      })
+    }
+
+    const handleBeforeUnload = () => {
+      // browser refresh / tab close
+      cancelAllActiveTasks()
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+
+      // SPA route change / component unmount
+      cancelAllActiveTasks()
+
+      // Abort any remaining poll requests
       Object.values(pollControllersRef.current).forEach(c => {
         try { c.abort() } catch {}
       })
       pollControllersRef.current = {}
 
+      // Revoke any blob URLs
       blobUrlsRef.current.forEach(url => {
         try { URL.revokeObjectURL(url) } catch {}
       })
       blobUrlsRef.current.clear()
     }
   }, [])
+
 
   const delay = (ms: number) => new Promise(res => setTimeout(res, ms))
 
@@ -275,6 +337,8 @@ const Image = () => {
     []
   )
 
+  /* ───────── Text-to-Image queue (krea) ───────── */
+
   type QueueArgs = {
     branch: Branch
     prompt: string
@@ -301,7 +365,10 @@ const Image = () => {
       const h = settings.height ?? 1024
       const steps = settings.steps ?? 28
       const cfg = settings.cfg ?? 4.0
-      const batch = Math.max(1, Number((settings as any).numImages ?? (settings as any).batch ?? 1))
+      const batch = Math.max(
+        1,
+        Number((settings as any).numImages ?? (settings as any).batch ?? 1)
+      )
       const format = (settings as any).outFormat ?? 'png'
       const seedStr = (settings.seed ?? '').toString().trim()
       const seed = seedStr === '' ? undefined : Number(seedStr)
@@ -350,7 +417,146 @@ const Image = () => {
         let metas: TaskMeta[] = []
 
         if (Array.isArray(data?.task_ids) && data.task_ids.length) {
-          metas = (Array.isArray(data?.tasks) ? data.tasks : data.task_ids.map((tid: string) => ({ task_id: tid })))
+          metas = (Array.isArray(data?.tasks)
+            ? data.tasks
+            : data.task_ids.map((tid: string) => ({ task_id: tid })))
+            .map((t: any, i: number) => ({
+              taskId: t?.task_id || data.task_ids[i],
+              seed: typeof t?.seed === 'number' ? t.seed : (seed as number | undefined),
+              steps: typeof t?.num_inference_steps === 'number'
+                ? t.num_inference_steps
+                : steps,
+              cfg: typeof t?.guidance_scale === 'number'
+                ? t.guidance_scale
+                : cfg,
+              width: w,
+              height: h,
+              format,
+            }))
+        } else if (data?.task_id) {
+          metas = [{
+            taskId: data.task_id,
+            seed: typeof data?.seed === 'number' ? data.seed : (seed as number | undefined),
+            steps: typeof data?.num_inference_steps === 'number'
+              ? data.num_inference_steps
+              : steps,
+            cfg: typeof data?.guidance_scale === 'number'
+              ? data.guidance_scale
+              : cfg,
+            width: w,
+            height: h,
+            format,
+          }]
+        } else {
+          throw new Error('No task IDs returned')
+        }
+
+        setSlotsByBranch(prev => {
+          const next = { ...prev }
+          next[b] = metas.map(m => ({
+            branch: b,
+            taskId: m.taskId,
+            status: 'PENDING' as TaskStatus,
+            url: undefined,
+            meta: m,
+          }))
+          return next
+        })
+
+        // start polling each one
+        metas.forEach(m => {
+          stopPollingRef.current[m.taskId] = false
+          void pollSingle(b, m.taskId)
+        })
+      } catch (e: any) {
+        setIsGeneratingByBranch(prev => ({ ...prev, [b]: false }))
+        toast.error(e?.message || 'Failed to queue generation')
+      }
+    },
+    [onlineByBranch, pollSingle]
+  )
+
+  /* ───────── Image-to-Image queue (kontext, with image file) ───────── */
+
+  type I2IQueueArgs = {
+    branch: Branch
+    prompt: string
+    negative: string
+    settings: GeneralSettingsState
+    imageFile: File
+  }
+
+  const handleQueueImageToImage = useCallback(
+    async ({ branch: b, prompt, negative, settings, imageFile }: I2IQueueArgs) => {
+      if (!prompt.trim()) return
+
+      if (!onlineByBranch[b]) {
+        toast.error('Engine offline. Start it first.')
+        return
+      }
+
+      const base = getEngineBase(b)
+      if (!base) {
+        toast.error(`Engine base URL not set for ${b}`)
+        return
+      }
+
+      const w = settings.width ?? 768
+      const h = settings.height ?? 1024
+      const steps = settings.steps ?? 28
+      const cfg = settings.cfg ?? 4.0
+      const batch = Math.max(1, Number((settings as any).numImages ?? (settings as any).batch ?? 1))
+      const format = (settings as any).outFormat ?? 'png'
+      const seedStr = (settings.seed ?? '').toString().trim()
+      const seed = seedStr === '' ? undefined : Number(seedStr)
+
+      const form = new FormData()
+      form.append('model', 'kontext')
+      form.append('prompt', prompt.trim())
+      form.append('negative_prompt', negative.trim())
+      form.append('width', String(w))
+      form.append('height', String(h))
+      form.append('guidance_scale', String(cfg))
+      form.append('num_inference_steps', String(steps))
+      if (Number.isFinite(seed as number)) form.append('seed', String(seed))
+      form.append('out_format', format)
+      form.append('num_images', String(batch))
+      form.append('image', imageFile, imageFile.name)
+
+      setIsGeneratingByBranch(prev => ({ ...prev, [b]: true }))
+
+      // clear previous slots for this branch (and revoke blobs)
+      setSlotsByBranch(prev => {
+        const next = { ...prev }
+        next[b].forEach(slot => {
+          if (slot.url && slot.url.startsWith('blob:')) {
+            try {
+              URL.revokeObjectURL(slot.url)
+              blobUrlsRef.current.delete(slot.url)
+            } catch {}
+          }
+        })
+        next[b] = []
+        return next
+      })
+
+      try {
+        const res = await fetch(`${base}${QUEUE_ROUTE}`, {
+          method: 'POST',
+          body: form,
+        })
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '')
+          throw new Error(txt || `HTTP ${res.status}`)
+        }
+        const data = await res.json()
+
+        let metas: TaskMeta[] = []
+
+        if (Array.isArray(data?.task_ids) && data.task_ids.length) {
+          metas = (Array.isArray(data?.tasks)
+            ? data.tasks
+            : data.task_ids.map((tid: string) => ({ task_id: tid })))
             .map((t: any, i: number) => ({
               taskId: t?.task_id || data.task_ids[i],
               seed: typeof t?.seed === 'number' ? t.seed : (seed as number | undefined),
@@ -386,24 +592,158 @@ const Image = () => {
           return next
         })
 
-        // start polling each one
         metas.forEach(m => {
           stopPollingRef.current[m.taskId] = false
           void pollSingle(b, m.taskId)
         })
       } catch (e: any) {
         setIsGeneratingByBranch(prev => ({ ...prev, [b]: false }))
-        toast.error(e?.message || 'Failed to queue generation')
+        toast.error(e?.message || 'Failed to queue Img-to-Img')
       }
     },
     [onlineByBranch, pollSingle]
   )
 
+  /* ───────── Inpaint queue (fill, with image + mask) ───────── */
+
+  type InpaintQueueArgs = {
+    branch: Branch
+    prompt: string
+    negative: string
+    settings: GeneralSettingsState
+    imageFile: File
+    mask: Blob
+  }
+
+  const handleQueueInpaint = useCallback(
+    async ({ branch: b, prompt, negative, settings, imageFile, mask }: InpaintQueueArgs) => {
+      if (!prompt.trim()) return
+
+      if (!onlineByBranch[b]) {
+        toast.error('Engine offline. Start it first.')
+        return
+      }
+
+      const base = getEngineBase(b)
+      if (!base) {
+        toast.error(`Engine base URL not set for ${b}`)
+        return
+      }
+
+      const steps = settings.steps ?? 28
+      const cfg = settings.cfg ?? 4.0
+      const batch = Math.max(
+        1,
+        Number((settings as any).numImages ?? (settings as any).batch ?? 1)
+      )
+      const format = (settings as any).outFormat ?? 'png'
+      const seedStr = (settings.seed ?? '').toString().trim()
+      const seed = seedStr === '' ? undefined : Number(seedStr)
+
+      const form = new FormData()
+      form.append('model', 'fill')
+      form.append('prompt', prompt.trim())
+      form.append('negative_prompt', negative.trim())
+      form.append('guidance_scale', String(cfg))
+      form.append('num_inference_steps', String(steps))
+      if (Number.isFinite(seed as number)) form.append('seed', String(seed))
+      form.append('out_format', format)
+      form.append('num_images', String(batch))
+      form.append('image', imageFile, imageFile.name)
+      form.append('mask', new File([mask], 'mask.png', { type: 'image/png' }))
+
+      setIsGeneratingByBranch(prev => ({ ...prev, [b]: true }))
+
+      // clear previous slots for this branch (and revoke blobs)
+      setSlotsByBranch(prev => {
+        const next = { ...prev }
+        next[b].forEach(slot => {
+          if (slot.url && slot.url.startsWith('blob:')) {
+            try {
+              URL.revokeObjectURL(slot.url)
+              blobUrlsRef.current.delete(slot.url)
+            } catch {}
+          }
+        })
+        next[b] = []
+        return next
+      })
+
+      try {
+        const res = await fetch(`${base}${QUEUE_ROUTE}`, {
+          method: 'POST',
+          body: form,
+        })
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '')
+          throw new Error(txt || `HTTP ${res.status}`)
+        }
+        const data = await res.json()
+
+        let metas: TaskMeta[] = []
+
+        if (Array.isArray(data?.task_ids) && data.task_ids.length) {
+          metas = (Array.isArray(data?.tasks)
+            ? data.tasks
+            : data.task_ids.map((tid: string) => ({ task_id: tid })))
+            .map((t: any, i: number) => ({
+              taskId: t?.task_id || data.task_ids[i],
+              seed: typeof t?.seed === 'number' ? t.seed : (seed as number | undefined),
+              steps: typeof t?.num_inference_steps === 'number'
+                ? t.num_inference_steps
+                : steps,
+              cfg: typeof t?.guidance_scale === 'number'
+                ? t.guidance_scale
+                : cfg,
+              format,
+            }))
+        } else if (data?.task_id) {
+          metas = [{
+            taskId: data.task_id,
+            seed: typeof data?.seed === 'number' ? data.seed : (seed as number | undefined),
+            steps: typeof data?.num_inference_steps === 'number'
+              ? data.num_inference_steps
+              : steps,
+            cfg: typeof data?.guidance_scale === 'number'
+              ? data.guidance_scale
+              : cfg,
+            format,
+          }]
+        } else {
+          throw new Error('No task IDs returned')
+        }
+
+        setSlotsByBranch(prev => {
+          const next = { ...prev }
+          next[b] = metas.map(m => ({
+            branch: b,
+            taskId: m.taskId,
+            status: 'PENDING',
+            url: undefined,
+            meta: m,
+          }))
+          return next
+        })
+
+        metas.forEach(m => {
+          stopPollingRef.current[m.taskId] = false
+          void pollSingle(b, m.taskId)
+        })
+      } catch (e: any) {
+        setIsGeneratingByBranch(prev => ({ ...prev, [b]: false }))
+        toast.error(e?.message || 'Failed to queue Inpaint')
+      }
+    },
+    [onlineByBranch, pollSingle]
+  )
+
+  /* ───────── Cancel for a branch (all tasks) ───────── */
+
   const handleCancelBranch = useCallback(
     (b: Branch) => {
       const slots = slotsByBranch[b]
       if (!slots.length) return
-
+  
       // stop local polling
       slots.forEach(s => {
         stopPollingRef.current[s.taskId] = true
@@ -413,9 +753,20 @@ const Image = () => {
         }
         delete pollControllersRef.current[s.taskId]
       })
-
+  
+      // Mark all non-completed tasks as CANCELLED
+      setSlotsByBranch(prev => {
+        const next = { ...prev }
+        next[b] = next[b].map(s =>
+          s.status === 'SUCCESS'
+            ? s
+            : { ...s, status: 'CANCELLED' as TaskStatus }
+        )
+        return next
+      })
+  
       setIsGeneratingByBranch(prev => ({ ...prev, [b]: false }))
-
+  
       // tell backend to hard-cancel
       const base = getEngineBase(b)
       if (base) {
@@ -429,7 +780,7 @@ const Image = () => {
       }
     },
     [slotsByBranch]
-  )
+  )  
 
   // When all slots for a branch are terminal, drop its "generating" flag
   useEffect(() => {
@@ -438,17 +789,22 @@ const Image = () => {
       const anyGenerating = isGeneratingByBranch[b]
       if (!anyGenerating) return
       if (!slots.length) {
-        setIsGeneratingByBranch(prev => (prev[b] ? { ...prev, [b]: false } : prev))
+        // setIsGeneratingByBranch(prev => (prev[b] ? { ...prev, [b]: false } : prev))
         return
       }
-      const allDone = slots.every(s => s.status === 'SUCCESS' || s.status === 'FAILURE')
+      const allDone = slots.every(
+        s =>
+          s.status === 'SUCCESS' ||
+          s.status === 'FAILURE' ||
+          s.status === 'CANCELLED'
+      )      
       if (allDone) {
         setIsGeneratingByBranch(prev => (prev[b] ? { ...prev, [b]: false } : prev))
       }
     })
   }, [slotsByBranch, isGeneratingByBranch])
 
-  /* ───────── Engine status polling (unchanged, still via API_BASE) ───────── */
+  /* ───────── Engine status polling (via API_BASE) ───────── */
 
   useEffect(() => {
     if (!API_BASE) return
@@ -483,7 +839,7 @@ const Image = () => {
           toast.success(`${label} is live.`)
         }
         prevOnlineRef.current[branch] = isOnline
-      } catch (err) {
+      } catch {
         // treat as offline only if not aborted
         if (!controller.signal.aborted) {
           setOnlineByBranch(prev => {
@@ -508,7 +864,7 @@ const Image = () => {
       if (tick) window.clearTimeout(tick)
       controller.abort()
     }
-  }, [branch, API_BASE])
+  }, [branch])
 
   // If we came from the main LoRA Library's "Use" button, open the LoRA tab
   useEffect(() => {
@@ -553,7 +909,7 @@ const Image = () => {
         </div>
 
         <div className={`${styles.engineStatus} ${engineOnline ? styles.onlineStatus : ''}`}>
-          <div className={`${styles.statusDot} ${engineOnline ? styles.online : styles.offline}`}></div>
+          <div className={`${styles.statusDot} ${engineOnline ? styles.online : styles.offline}`} />
           <span>
             {`${BRANCH_TO_ENGINE_LABEL[branch]} ${engineOnline ? 'Online' : 'Offline'}`}
           </span>
@@ -568,7 +924,6 @@ const Image = () => {
               engineOnline={engineOnline}
               settings={settings}
               onEngineOnlineChange={setBranchOnline}
-              // NEW: task tracking from parent
               slots={branchSlots}
               isGenerating={isGenerating}
               onGenerate={({ prompt, negative }) =>
@@ -582,11 +937,12 @@ const Image = () => {
               engineOnline={engineOnline}
               settings={settings}
               onEngineOnlineChange={setBranchOnline}
-              // TODO: when you refactor ImageToImage, pass the same task props here
-              // slots={branchSlotsForKontext}
-              // isGenerating={isGeneratingByBranch.kontext}
-              // onGenerate={...}
-              // onCancel={...}
+              slots={branchSlots}
+              isGenerating={isGenerating}
+              onGenerate={({ prompt, negative, imageFile }) =>
+                handleQueueImageToImage({ branch, prompt, negative, settings, imageFile })
+              }
+              onCancel={() => handleCancelBranch(branch)}
             />
           )}
           {activeTab === 'inpaint' && (
@@ -594,11 +950,15 @@ const Image = () => {
               engineOnline={engineOnline}
               settings={settings}
               onEngineOnlineChange={setBranchOnline}
-              // TODO: same idea for Inpaint
+              slots={branchSlots}
+              isGenerating={isGenerating}
+              onGenerate={({ prompt, negative, imageFile, mask }) =>
+                handleQueueInpaint({ branch, prompt, negative, settings, imageFile, mask })
+              }
+              onCancel={() => handleCancelBranch(branch)}
             />
           )}
         </div>
-
         <div className={`${styles.right} ${styles.panel}`}>
           {/* Right-side tabs: Settings | LoRA Library */}
           <div className={styles.tabs}>
@@ -627,7 +987,6 @@ const Image = () => {
           {activeRightTab === 'settings' ? (
             <GeneralSettings value={settings} onChange={setSettings} />
           ) : (
-            // Capture selection changes from the right-side LoRA Library
             <LoraLibrary onSelectedChange={setActiveLoras} />
           )}
         </div>

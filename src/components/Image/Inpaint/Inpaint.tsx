@@ -1,6 +1,7 @@
 // src/components/Inpaint/Inpaint.tsx
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import type { GeneralSettingsState } from '../Right/Settings/Settings'
+import type { Slot } from '../Image'
 import {
   Sparkles, Info, ChevronDown, ChevronUp, CircleStop, Send, RefreshCcw, Copy,
   CornerDownLeft, Upload, Trash, Brush, Eraser, RotateCcw, Droplet,
@@ -12,45 +13,32 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 
+type Branch = 'krea' | 'kontext' | 'fill'
+
 type Props = {
   engineOnline: boolean
   settings?: GeneralSettingsState
-  onEngineOnlineChange?: (b: 'krea' | 'kontext' | 'fill', online: boolean) => void
-}
+  onEngineOnlineChange?: (b: Branch, online: boolean) => void
 
-type TaskMeta = {
-  taskId: string
-  seed?: number
-  steps?: number
-  cfg?: number
-  format?: string
-}
-
-type Slot = {
-  taskId: string
-  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILURE'
-  url?: string
-  meta: TaskMeta
+  // NEW: task tracking is parent-owned (Image.tsx)
+  slots: Slot[]
+  isGenerating: boolean
+  onGenerate: (args: {
+    prompt: string
+    negative: string
+    imageFile: File
+    mask: Blob
+  }) => void
+  onCancel: () => void
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-const ENGINE_BASE_URL = import.meta.env.VITE_IMAGE_FILL_ENGINE_API_BASE_URL
 
-const BRANCHES = ['krea', 'kontext', 'fill'] as const
-type Branch = typeof BRANCHES[number]
-
-// Backend routes (same “/image/…” stack you showed)
-const QUEUE_ROUTE_INPAINT = '/image/image/generate/'
-const STATUS_ROUTE = (taskId: string) => `/image/image/task-status/${taskId}`
-const CANCEL_ROUTE = '/image/image/cancel/'
 const START_ENGINE_ROUTE = (branch: Branch) => `/images/${branch}/start-runpod/`
 
 function normalizeBase(url?: string) {
   if (!url) return ''
   return url.replace(/\/+$/, '')
-}
-function revokeAll(urls: string[]) {
-  urls.forEach(u => { try { if (u.startsWith('blob:')) URL.revokeObjectURL(u) } catch {} })
 }
 
 const countWords = (s: string) => (s.trim() ? s.trim().split(/\s+/).filter(Boolean).length : 0)
@@ -84,7 +72,7 @@ function PreviewModal({
   const safeIndex = Math.min(Math.max(0, index), slots.length - 1)
   const slot = slots[safeIndex]
   const { url, meta } = slot || {}
-  const { seed, steps, cfg, format } = meta || {}
+  const { seed, steps, cfg, width, height, format } = meta || {}
 
   const go = useCallback((dir: number) => {
     setIndex((safeIndex + dir + slots.length) % slots.length)
@@ -163,6 +151,12 @@ function PreviewModal({
               <div className={styles.metaValue}>{seed ?? '—'}</div>
             </div>
             <div className={styles.metaCard}>
+              <div className={styles.metaLabel}>Size</div>
+              <div className={styles.metaValue}>
+                {width && height ? `${width}×${height}` : '—'}
+              </div>
+            </div>
+            <div className={styles.metaCard}>
               <div className={styles.metaLabel}>Format</div>
               <div className={styles.metaValue}>{(format || 'png').toUpperCase()}</div>
             </div>
@@ -171,7 +165,11 @@ function PreviewModal({
 
         {url && (
           <div className={styles.modalFooter}>
-            <a className={styles.primaryBtnSm} href={url} download={`krea_inpaint_${seed ?? 'edit'}.${(format || 'png')}`}>
+            <a
+              className={styles.primaryBtnSm}
+              href={url}
+              download={`krea_inpaint_${seed ?? 'edit'}.${(format || 'png')}`}
+            >
               Download
             </a>
           </div>
@@ -181,7 +179,15 @@ function PreviewModal({
   )
 }
 
-export default function Inpaint({ engineOnline, settings, onEngineOnlineChange }: Props) {
+export default function Inpaint({
+  engineOnline,
+  // settings,
+  onEngineOnlineChange,
+  slots,
+  isGenerating,
+  onGenerate,
+  onCancel,
+}: Props) {
   // Reference image
   const [refFile, setRefFile] = useState<File | null>(null)
   const [refPreview, setRefPreview] = useState<string | null>(null)
@@ -192,7 +198,7 @@ export default function Inpaint({ engineOnline, settings, onEngineOnlineChange }
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(12)
   const [mode, setMode] = useState<'brush' | 'erase'>('brush')
-  const [maskColor, setMaskColor] = useState<MaskColor>('white') // display-only for contrast
+  const [maskColor, setMaskColor] = useState<MaskColor>('white') // display-only
 
   const [isMaskDirty, setIsMaskDirty] = useState(false)
 
@@ -215,15 +221,6 @@ export default function Inpaint({ engineOnline, settings, onEngineOnlineChange }
   const [refinedDraft, setRefinedDraft] = useState('')
   const [isSuggesting, setIsSuggesting] = useState(false)
 
-  // generation state
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [slots, setSlots] = useState<Slot[]>([])
-  const stopPollingRef = useRef(false)
-  const cancellingRef = useRef(false)
-  const pollControllersRef = useRef<Record<string, AbortController>>({})
-  const urlsRef = useRef<string[]>([])
-  useEffect(() => { urlsRef.current = slots.map(s => s.url || '').filter(Boolean) }, [slots])
-
   // preview
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewIndex, setPreviewIndex] = useState<number>(0)
@@ -242,7 +239,7 @@ export default function Inpaint({ engineOnline, settings, onEngineOnlineChange }
   const MIN_FRAME_WIDTH = 320
   const MAX_FRAME_WIDTH = 900
 
-  // done slots (successful with urls)
+  // Only successful slots for preview/download (from parent)
   const doneSlots = useMemo(
     () => slots.filter(s => s.status === 'SUCCESS' && !!s.url),
     [slots]
@@ -256,24 +253,12 @@ export default function Inpaint({ engineOnline, settings, onEngineOnlineChange }
       try { wsNegRef.current?.close() } catch {}
       if (dotsTimerRef.current) clearInterval(dotsTimerRef.current)
 
-      try { Object.values(pollControllersRef.current).forEach(c => c.abort()) } catch {}
-      pollControllersRef.current = {}
-
-      if (refPreview?.startsWith('blob:')) URL.revokeObjectURL(refPreview)
-      revokeAll(urlsRef.current)
+      if (refPreview?.startsWith('blob:')) {
+        try { URL.revokeObjectURL(refPreview) } catch {}
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  /* stop spinner/cancel once ALL slots are terminal */
-  useEffect(() => {
-    if (!isGenerating || slots.length === 0) return
-    const allDone = slots.every(s => s.status === 'SUCCESS' || s.status === 'FAILURE')
-    if (allDone) {
-      setIsGenerating(false)
-      stopPollingRef.current = false
-    }
-  }, [slots, isGenerating])
 
   // --- utils ---
   function makeWsUrl(path: string) {
@@ -282,7 +267,7 @@ export default function Inpaint({ engineOnline, settings, onEngineOnlineChange }
       const u = new URL(base)
       u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
       const basePath = u.pathname.endsWith('/') ? u.pathname.slice(0, -1) : u.pathname
-      const relPath  = path.startsWith('/') ? path : `/${path}`
+      const relPath = path.startsWith('/') ? path : `/${path}`
       u.pathname = `${basePath}${relPath}`
       return u.toString()
     } catch {
@@ -338,7 +323,7 @@ export default function Inpaint({ engineOnline, settings, onEngineOnlineChange }
     return () => ro.disconnect()
   }, [refPreview])
 
-  // Touch support
+  // Touch support helper
   const pointerFromTouch = (e: React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return { x: 0, y: 0 }
@@ -370,59 +355,73 @@ export default function Inpaint({ engineOnline, settings, onEngineOnlineChange }
     const f = e.dataTransfer.files?.[0]
     if (!f) return
     if (f.size > 100 * 1024 * 1024) return toast.error(`"${f.name}" exceeds 100MB limit.`)
-    if (refPreview?.startsWith('blob:')) URL.revokeObjectURL(refPreview)
+    if (refPreview?.startsWith('blob:')) {
+      try { URL.revokeObjectURL(refPreview) } catch {}
+    }
     setRefFile(f)
     setRefPreview(URL.createObjectURL(f))
   }
 
-  // --- engine ---
   // ENGINE START — start only the fill branch
-const handleStartEngine = async () => {
-  if (!API_BASE_URL) {
-    toast.error('API base URL not set')
-    return
-  }
-  const t = toast.loading('Starting Inpaint engine…')
-  try {
-    const { data } = await axios.post(
-      `${normalizeBase(API_BASE_URL)}${START_ENGINE_ROUTE('fill')}`
-    )
-    toast.dismiss(t)
-    const s = data?.status
-    if (['RUNNING', 'STARTING', 'REQUESTED'].includes(String(s))) {
-      toast.success('Inpaint Engine is starting.')
-    } else if (s === 'HEALTHY') {
-      toast.success('Inpaint Engine is already live.')
-      onEngineOnlineChange?.('fill', true)      // mark Online immediately
-    } else {
-      toast.error(`Engine status: ${s || 'Unknown'}`)
+  const handleStartEngine = async () => {
+    if (!API_BASE_URL) {
+      toast.error('API base URL not set')
+      return
     }
-  } catch (err: any) {
-    toast.dismiss(t)
-    const msg =
-      err?.response?.data?.error ||
-      err?.response?.data?.detail ||
-      err?.response?.data?.message ||
-      err?.message ||
-      'Failed to start Inpaint engine.'
-    toast.error(msg)
+    const t = toast.loading('Starting Inpaint engine…')
+    try {
+      const { data } = await axios.post(
+        `${normalizeBase(API_BASE_URL)}${START_ENGINE_ROUTE('fill')}`
+      )
+      toast.dismiss(t)
+      const s = data?.status
+      if (['RUNNING', 'STARTING', 'REQUESTED'].includes(String(s))) {
+        toast.success('Inpaint Engine is starting.')
+      } else if (s === 'HEALTHY') {
+        toast.success('Inpaint Engine is already live.')
+        onEngineOnlineChange?.('fill', true)
+      } else {
+        toast.error(`Engine status: ${s || 'Unknown'}`)
+      }
+    } catch (err: any) {
+      toast.dismiss(t)
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Failed to start Inpaint engine.'
+      toast.error(msg)
+    }
   }
-}
 
   // --- uploads ---
   const onPickRef = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
     if (!f) return
     if (f.size > 100 * 1024 * 1024) return toast.error(`"${f.name}" exceeds 100MB limit.`)
-    if (refPreview?.startsWith('blob:')) URL.revokeObjectURL(refPreview)
+    if (refPreview?.startsWith('blob:')) {
+      try { URL.revokeObjectURL(refPreview) } catch {}
+    }
     setRefFile(f)
     const url = URL.createObjectURL(f)
     setRefPreview(url)
   }
 
+  const clearCanvas = () => {
+    const c = canvasRef.current
+    const ctx = c?.getContext('2d')
+    if (!c || !ctx) return
+    ctx.clearRect(0, 0, c.width, c.height)
+    setIsMaskDirty(false)
+  }
+
   const clearRef = () => {
-    if (refPreview?.startsWith('blob:')) URL.revokeObjectURL(refPreview)
-    setRefFile(null); setRefPreview(null)
+    if (refPreview?.startsWith('blob:')) {
+      try { URL.revokeObjectURL(refPreview) } catch {}
+    }
+    setRefFile(null)
+    setRefPreview(null)
     clearCanvas()
   }
 
@@ -490,19 +489,11 @@ const handleStartEngine = async () => {
   }
   const handleTouchEnd = () => setIsDrawing(false)
 
-  const clearCanvas = () => {
-    const c = canvasRef.current
-    const ctx = c?.getContext('2d')
-    if (!c || !ctx) return
-    ctx.clearRect(0, 0, c.width, c.height)
-    setIsMaskDirty(false)
-  }
-
-// Replace isAllBlack with alpha-based check
+  // mask helpers (alpha-based)
   const hasAnyPaint = (imgData: ImageData) => {
     const d = imgData.data
     for (let i = 0; i < d.length; i += 4) {
-      if (d[i + 3] > 0) return true // any visible pixel = painted
+      if (d[i + 3] > 0) return true
     }
     return false
   }
@@ -510,19 +501,19 @@ const handleStartEngine = async () => {
   const exportBinaryMaskBlob = async (): Promise<Blob | null> => {
     const src = canvasRef.current
     if (!src) return null
-  
+
     const w = src.width
     const h = src.height
     const srcCtx = src.getContext('2d')
     if (!srcCtx) return null
-  
+
     const img = srcCtx.getImageData(0, 0, w, h)
     const data = img.data
-  
-    // If nothing drawn → bail (alpha-based)
+
+    // nothing drawn
     if (!hasAnyPaint(img)) return null
-  
-    // Binarize: any painted (alpha>0) → white; else → black
+
+    // binarize → white where painted, black elsewhere
     for (let i = 0; i < data.length; i += 4) {
       const a = data[i + 3]
       if (a > 0) {
@@ -537,204 +528,56 @@ const handleStartEngine = async () => {
         data[i + 3] = 255
       }
     }
-  
+
     const off = document.createElement('canvas')
     off.width = w
     off.height = h
     const offCtx = off.getContext('2d')
     if (!offCtx) return null
     offCtx.putImageData(img, 0, 0)
-  
+
     return await new Promise<Blob | null>((resolve) =>
       off.toBlob((b) => resolve(b), 'image/png')
     )
-  }  
-
-  // --- polling ---
-  const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
-
-  const pollSingle = async (taskId: string, slotIndex: number) => {
-    try {
-      while (!stopPollingRef.current) {
-        const controller = new AbortController()
-        pollControllersRef.current[taskId] = controller
-
-        const res = await fetch(`${normalizeBase(ENGINE_BASE_URL)}${STATUS_ROUTE(taskId)}`, {
-          signal: controller.signal,
-        })
-
-        const ct = (res.headers.get('content-type') || '').toLowerCase()
-
-        if (res.ok && ct.startsWith('image/')) {
-          const blob = await res.blob()
-          const url = URL.createObjectURL(blob)
-          setSlots(prev => {
-            const next = [...prev]
-            const old = next[slotIndex]?.url
-            if (old?.startsWith('blob:')) { try { URL.revokeObjectURL(old) } catch {} }
-            next[slotIndex] = { ...next[slotIndex], status: 'SUCCESS', url }
-            return next
-          })
-          delete pollControllersRef.current[taskId]
-          return
-        }
-
-        // Maybe JSON status or empty
-        let data: any = null
-        try { data = await res.json() } catch {}
-
-        if (data?.state === 'FAILURE') {
-          toast.error(data?.error || `Task ${taskId} failed`)
-          setSlots(prev => {
-            const next = [...prev]
-            next[slotIndex] = { ...next[slotIndex], status: 'FAILURE' }
-            return next
-          })
-          delete pollControllersRef.current[taskId]
-          return
-        }
-
-        setSlots(prev => {
-          const next = [...prev]
-          if (next[slotIndex]?.status === 'PENDING') {
-            next[slotIndex] = { ...next[slotIndex], status: 'RUNNING' }
-          }
-          return next
-        })
-
-        await delay(1200)
-      }
-    } catch (e: any) {
-      delete pollControllersRef.current[taskId]
-      if (!stopPollingRef.current) toast.error(e?.message || `Task ${taskId} error`)
-      setSlots(prev => {
-        const next = [...prev]
-        next[slotIndex] = { ...next[slotIndex], status: 'FAILURE' }
-        return next
-      })
-    }
   }
 
-  // --- generate/cancel ---
-  const handleGenerate = async () => {
+  // Generate / Cancel (delegates to parent)
+  const handleGenerateClick = async () => {
     // toggle → Cancel
     if (isGenerating) {
-      handleCancelGenerate()
+      onCancel()
       return
     }
 
     if (!prompt.trim()) return
-    if (!engineOnline) return toast.error('Engine offline. Start it first.')
-    if (!API_BASE_URL && !ENGINE_BASE_URL) return toast.error('API base URL not set')
-    if (!refFile) return toast.error('Please upload a reference image.')
-    if (!isMaskDirty) return toast.error('Draw over what you want edited.')
+    if (!engineOnline) {
+      toast.error('Engine offline. Start it first.')
+      return
+    }
+    if (!refFile) {
+      toast.error('Please upload a reference image.')
+      return
+    }
+    if (!isMaskDirty) {
+      toast.error('Draw over what you want edited.')
+      return
+    }
 
-    // Build mask
     const maskBlob = await exportBinaryMaskBlob()
     if (!maskBlob) {
       toast.error('Draw over what you want edited.')
       return
     }
 
-    setIsGenerating(true)
-    stopPollingRef.current = false
-
-    revokeAll(urlsRef.current)
-    setSlots([])
-
-    // Prefer explicit settings if provided
-    const steps = settings?.steps ?? 26
-    const cfg = settings?.cfg ?? 3.0
-    const batch = Math.max(1, Number((settings as any)?.numImages ?? (settings as any)?.batch ?? 1))
-    const format = (settings as any)?.outFormat ?? 'png'
-    const seedStr = (settings?.seed ?? '').toString().trim()
-    const seed = seedStr === '' ? undefined : Number(seedStr)
-
-    const form = new FormData()
-    form.append('model', 'fill')
-    form.append('prompt', prompt.trim())
-    form.append('negative_prompt', (negative || '').trim())
-    form.append('guidance_scale', String(cfg))
-    form.append('num_inference_steps', String(steps))
-    if (Number.isFinite(seed as number)) form.append('seed', String(seed))
-    form.append('out_format', format)
-    form.append('num_images', String(batch))
-    form.append('image', refFile, refFile.name)
-    form.append('mask', new File([maskBlob], 'mask.png', { type: 'image/png' }))
-
-    try {
-      const res = await fetch(`${normalizeBase(ENGINE_BASE_URL)}${QUEUE_ROUTE_INPAINT}`, {
-        method: 'POST',
-        body: form,
-      })
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '')
-        throw new Error(txt || `HTTP ${res.status}`)
-      }
-      const data = await res.json()
-
-      if (Array.isArray(data?.task_ids) && data.task_ids.length) {
-        const metas: TaskMeta[] =
-          (Array.isArray(data?.tasks) ? data.tasks : data.task_ids.map((tid: string) => ({ task_id: tid })))
-            .map((t: any, i: number) => ({
-              taskId: t?.task_id || data.task_ids[i],
-              seed: typeof t?.seed === 'number' ? t.seed : (seed as number | undefined),
-              steps: typeof t?.num_inference_steps === 'number' ? t.num_inference_steps : steps,
-              cfg: typeof t?.guidance_scale === 'number' ? t.guidance_scale : cfg,
-              format,
-            }))
-
-        const initialSlots: Slot[] = metas.map(m => ({ taskId: m.taskId, status: 'PENDING', url: undefined, meta: m }))
-        setSlots(initialSlots)
-        metas.forEach((m, idx) => pollSingle(m.taskId, idx))
-      } else if (data?.task_id) {
-        const m: TaskMeta = {
-          taskId: data.task_id,
-          seed: typeof data?.seed === 'number' ? data.seed : (seed as number | undefined),
-          steps: typeof data?.num_inference_steps === 'number' ? data.num_inference_steps : steps,
-          cfg: typeof data?.guidance_scale === 'number' ? data.guidance_scale : cfg,
-          format,
-        }
-        setSlots([{ taskId: m.taskId, status: 'PENDING', url: undefined, meta: m }])
-        pollSingle(m.taskId, 0)
-      } else {
-        throw new Error('No task IDs returned')
-      }
-    } catch (e: any) {
-      setIsGenerating(false)
-      toast.error(e?.message || 'Failed to queue inpaint')
-    }
+    onGenerate({
+      prompt,
+      negative,
+      imageFile: refFile,
+      mask: maskBlob,
+    })
   }
 
-  // CANCEL
-  const handleCancelGenerate = async () => {
-    if (cancellingRef.current) return
-    cancellingRef.current = true
-  
-    // immediate UI feedback + stop local work right away
-    stopPollingRef.current = true
-    try { Object.values(pollControllersRef.current).forEach(c => c.abort()) } catch {}
-    pollControllersRef.current = {}
-    setIsGenerating(false)
-    toast.success('Cancellation started.')
-  
-    // tell server to hard-cancel (fire-and-forget, parallel)
-    if (ENGINE_BASE_URL && slots.length) {
-      const base = normalizeBase(ENGINE_BASE_URL)
-      const reqs = slots.map(s => {
-        const fd = new FormData()
-        fd.append('task_id', s.taskId)
-        fd.append('hard_kill', 'true')
-        return fetch(`${base}${CANCEL_ROUTE}`, { method: 'POST', body: fd }).catch(() => null)
-      })
-      // don’t block UI; let them resolve in the background
-      void Promise.allSettled(reqs)
-    }
-  
-    cancellingRef.current = false
-  }  
-
-  // --- refine ---
+  // --- refine / negatives / chat ---
   const WS_PATHS = {
     chat: '/ws/emails/generate-ai/',
     refine: '/ws/images/refine-edit-prompt/',
@@ -746,26 +589,40 @@ const handleStartEngine = async () => {
     setThinkingLabel('AI is thinking')
     dotsTimerRef.current = setInterval(() => {
       const dots = ['.', '..', '...']
-      setThinkingLabel(`AI is thinking${dots[i % dots.length]}`); i++
+      setThinkingLabel(`AI is thinking${dots[i % dots.length]}`)
+      i++
     }, 500)
   }
   const stopThinkingAnimation = () => {
-    if (dotsTimerRef.current) { clearInterval(dotsTimerRef.current); dotsTimerRef.current = null }
+    if (dotsTimerRef.current) {
+      clearInterval(dotsTimerRef.current)
+      dotsTimerRef.current = null
+    }
     setThinkingLabel('')
   }
 
   const handleRefinePrompt = async () => {
     if (!prompt.trim() || isRefining) return
-    setIsRefining(true); setRefinedDraft('')
+    setIsRefining(true)
+    setRefinedDraft('')
     try {
       const ws = await openSocket(WS_PATHS.refine, wsRefineRef)
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data)
           if (msg.event === 'started') return
-          if (msg.token) { setRefinedDraft(prev => (prev || '') + msg.token); return }
-          if (msg.done) { setIsRefining(false); return }
-          if (msg.error) { toast.error(String(msg.error)); setIsRefining(false) }
+          if (msg.token) {
+            setRefinedDraft(prev => (prev || '') + msg.token)
+            return
+          }
+          if (msg.done) {
+            setIsRefining(false)
+            return
+          }
+          if (msg.error) {
+            toast.error(String(msg.error))
+            setIsRefining(false)
+          }
         } catch {
           setRefinedDraft(prev => (prev || '') + String(e.data || ''))
         }
@@ -775,22 +632,33 @@ const handleStartEngine = async () => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
       else ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
     } catch (err: any) {
-      toast.error(err?.message || 'Refine failed'); setIsRefining(false)
+      toast.error(err?.message || 'Refine failed')
+      setIsRefining(false)
     }
   }
 
   const handleSuggestWithAI = async () => {
     if (!prompt.trim() || isSuggesting) return
-    setIsSuggesting(true); setNegative('')
+    setIsSuggesting(true)
+    setNegative('')
     try {
       const ws = await openSocket(WS_PATHS.negatives, wsNegRef)
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data)
           if (msg.event === 'started') return
-          if (msg.token) { setNegative(prev => (prev || '') + msg.token); return }
-          if (msg.done) { setIsSuggesting(false); return }
-          if (msg.error) { toast.error(String(msg.error)); setIsSuggesting(false) }
+          if (msg.token) {
+            setNegative(prev => (prev || '') + msg.token)
+            return
+          }
+          if (msg.done) {
+            setIsSuggesting(false)
+            return
+          }
+          if (msg.error) {
+            toast.error(String(msg.error))
+            setIsSuggesting(false)
+          }
         } catch {
           setNegative(prev => (prev || '') + String(e.data || ''))
         }
@@ -800,63 +668,113 @@ const handleStartEngine = async () => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
       else ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
     } catch (err: any) {
-      toast.error(err?.message || 'Suggestion failed'); setIsSuggesting(false)
+      toast.error(err?.message || 'Suggestion failed')
+      setIsSuggesting(false)
     }
   }
 
-  // --- chat ---
   const sendChatPrompt = async (text: string) => {
-    if (isTyping) { try { wsChatRef.current?.close(4001, 'client cancel') } catch {}; return }
+    if (isTyping) {
+      try { wsChatRef.current?.close(4001, 'client cancel') } catch {}
+      return
+    }
     if (!text.trim()) return
-    setAiResponse(''); setIsTyping(true); setLastPrompt(text); startThinkingAnimation()
+    setAiResponse('')
+    setIsTyping(true)
+    setLastPrompt(text)
+    startThinkingAnimation()
     let full = ''
+
     try {
       const ws = await openSocket(WS_PATHS.chat, wsChatRef)
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data)
           if (msg.event === 'started') return
-          if (msg.token) { full += msg.token; setAiResponse(prev => prev + msg.token); return }
-          if (msg.done) {
-            setIsTyping(false); stopThinkingAnimation()
-            setConversationHistory(prev => [...prev, { role: 'user', content: text }, { role: 'assistant', content: full }])
+          if (msg.token) {
+            full += msg.token
+            setAiResponse(prev => prev + msg.token)
             return
           }
-          if (msg.error) { setIsTyping(false); stopThinkingAnimation(); toast.error(String(msg.error)) }
+          if (msg.done) {
+            setIsTyping(false)
+            stopThinkingAnimation()
+            setConversationHistory(prev => [
+              ...prev,
+              { role: 'user', content: text },
+              { role: 'assistant', content: full },
+            ])
+            return
+          }
+          if (msg.error) {
+            setIsTyping(false)
+            stopThinkingAnimation()
+            toast.error(String(msg.error))
+          }
         } catch {
-          const s = String(e.data || ''); full += s; setAiResponse(prev => prev + s)
+          const s = String(e.data || '')
+          full += s
+          setAiResponse(prev => prev + s)
         }
       }
-      ws.onerror = () => { setIsTyping(false); stopThinkingAnimation(); toast.error('WebSocket error') }
-      ws.onclose = () => { if (isTyping) { setIsTyping(false); stopThinkingAnimation() } }
+      ws.onerror = () => {
+        setIsTyping(false)
+        stopThinkingAnimation()
+        toast.error('WebSocket error')
+      }
+      ws.onclose = () => {
+        if (isTyping) {
+          setIsTyping(false)
+          stopThinkingAnimation()
+        }
+      }
       const payload = { prompt: text, history: conversationHistory || [] }
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
       else ws.addEventListener('open', () => ws.send(JSON.stringify(payload)), { once: true })
     } catch (e: any) {
-      setIsTyping(false); stopThinkingAnimation(); toast.error(e?.message || 'Failed to start chat')
+      setIsTyping(false)
+      stopThinkingAnimation()
+      toast.error(e?.message || 'Failed to start chat')
     }
   }
 
   const handleChatAsk = () => {
-    if (isTyping) { try { wsChatRef.current?.close(4001, 'client cancel') } catch {}; return }
-    const text = askInput.trim(); if (!text) return
-    setAskInput(''); sendChatPrompt(text)
+    if (isTyping) {
+      try { wsChatRef.current?.close(4001, 'client cancel') } catch {}
+      return
+    }
+    const text = askInput.trim()
+    if (!text) return
+    setAskInput('')
+    sendChatPrompt(text)
   }
-  const handleRegenerate = () => { if (!lastPrompt || isTyping) return; sendChatPrompt(lastPrompt) }
+
+  const handleRegenerate = () => {
+    if (!lastPrompt || isTyping) return
+    sendChatPrompt(lastPrompt)
+  }
+
   const handleCopy = async () => {
     if (!aiResponse) return
-    try { await navigator.clipboard.writeText(aiResponse); toast.success('Copied') }
-    catch { toast.error('Copy failed') }
+    try {
+      await navigator.clipboard.writeText(aiResponse)
+      toast.success('Copied')
+    } catch {
+      toast.error('Copy failed')
+    }
   }
+
   const handleApplyToPrompt = () => {
     if (!aiResponse.trim()) return
-    setPrompt(aiResponse.trim()); toast.success('Inserted into Prompt')
+    setPrompt(aiResponse.trim())
+    toast.success('Inserted into Prompt')
   }
+
   const applyTemplate = (t: string) => setPrompt(t)
 
-  // Download all (single or zip)
+  // Download all (single or zip) from parent slots
   const handleDownloadAll = async () => {
-    const done = slots.filter(s => s.status === 'SUCCESS' && s.url)
+    const done = doneSlots
     if (done.length === 0) return
 
     if (done.length === 1) {
@@ -1111,7 +1029,7 @@ const handleStartEngine = async () => {
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
               e.preventDefault()
-              handleGenerate()
+              void handleGenerateClick()
             }
           }}
         />
@@ -1157,7 +1075,11 @@ const handleStartEngine = async () => {
             <div className={styles.previewHeader}>
               <span>Refined preview</span>
               <div className={styles.previewActions}>
-                <button onClick={() => setRefinedDraft('')} className={styles.secondaryBtn} title="Discard refined text">
+                <button
+                  onClick={() => setRefinedDraft('')}
+                  className={styles.secondaryBtn}
+                  title="Discard refined text"
+                >
                   Discard
                 </button>
                 <button
@@ -1182,21 +1104,26 @@ const handleStartEngine = async () => {
         {showChat && (
           <div id="promptChatPanel" className={styles.chatCard}>
             <div className={styles.chatPromptBar}>
-              <input
-                type="text"
+              <textarea
+                className={styles.chatPromptInput}
                 placeholder="Ask anything…"
                 value={askInput}
                 onChange={(e) => setAskInput(e.target.value)}
+                rows={2}
                 onKeyDown={(e) => {
+                  // Enter = send, Shift+Enter = newline
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     handleChatAsk()
                   }
                 }}
-                aria-label="Chat input"
-                title="Type and press Enter"
               />
-              <button className={styles.chatSendBtn} onClick={handleChatAsk} type="button" title={isTyping ? 'Stop' : 'Send'}>
+              <button
+                className={styles.chatSendBtn}
+                onClick={handleChatAsk}
+                type="button"
+                title={isTyping ? 'Stop' : 'Send'}
+              >
                 {isTyping ? <CircleStop size={18} /> : <Send size={18} />}
               </button>
             </div>
@@ -1228,7 +1155,12 @@ const handleStartEngine = async () => {
               </div>
               <div className="right">
                 <div className={styles.tooltipWrapper} data-tooltip="Copy">
-                  <button className={styles.chatIconBtn} onClick={handleCopy} aria-label="Copy" title="Copy">
+                  <button
+                    className={styles.chatIconBtn}
+                    onClick={handleCopy}
+                    aria-label="Copy"
+                    title="Copy"
+                  >
                     <Copy size={16} />
                   </button>
                 </div>
@@ -1314,9 +1246,10 @@ const handleStartEngine = async () => {
         {engineOnline ? (
           <button
             className={styles.primaryBtn}
-            disabled={!prompt.trim() || !refFile}
-            onClick={handleGenerate}
-            aria-disabled={!prompt.trim() || !refFile}
+            // Only disable when NOT generating and we can't generate
+            disabled={!isGenerating && (!prompt.trim() || !refFile)}
+            aria-disabled={!isGenerating && (!prompt.trim() || !refFile)}
+            onClick={() => { void handleGenerateClick() }}
             type="button"
             title={isGenerating ? 'Cancel' : 'Generate'}
           >
@@ -1324,7 +1257,13 @@ const handleStartEngine = async () => {
             {isGenerating ? 'Cancel' : 'Generate'}
           </button>
         ) : (
-          <button className={styles.primaryBtn} onClick={handleStartEngine} type="button" title="Start image engine">
+
+          <button
+            className={styles.primaryBtn}
+            onClick={handleStartEngine}
+            type="button"
+            title="Start image engine"
+          >
             Start Image Engine
           </button>
         )}
@@ -1339,10 +1278,25 @@ const handleStartEngine = async () => {
             {slots.map((s) => {
               const isLive = s.status === 'PENDING' || s.status === 'RUNNING'
               const failed = s.status === 'FAILURE'
+              const cancelled = s.status === 'CANCELLED'
+
+              const ariaLabel = s.url
+                ? 'Open preview'
+                : failed
+                  ? 'Failed'
+                  : cancelled
+                    ? 'Cancelled'
+                    : 'Generating…'
+
               return (
                 <div
                   key={s.taskId}
-                  className={`${styles.resultCell} ${isLive ? styles.live : ''} ${failed ? styles.failed : ''}`}
+                  className={`
+                    ${styles.resultCell}
+                    ${isLive ? styles.live : ''}
+                    ${failed ? styles.failed : ''}
+                    ${cancelled ? styles.cancelled : ''}
+                  `}
                   onClick={() => {
                     if (!s.url) return
                     const doneIdx = doneSlots.findIndex(ds => ds.taskId === s.taskId)
@@ -1353,14 +1307,17 @@ const handleStartEngine = async () => {
                   }}
                   role="button"
                   aria-busy={isLive}
-                  aria-label={s.url ? 'Open preview' : (failed ? 'Failed' : 'Generating…')}
+                  aria-label={ariaLabel}
                 >
-                  {!s.url && !failed && (
+                  {!s.url && !failed && !cancelled && (
                     <div className={styles.activeBg}>
                       <div className={styles.pulse} />
                     </div>
                   )}
+
                   {failed && <div className={styles.failedNote}>Failed</div>}
+                  {cancelled && <div className={styles.cancelledNote}>Cancelled</div>}
+
                   {s.url && <img src={s.url} className={styles.resultImg} alt="Result" />}
                 </div>
               )
@@ -1372,7 +1329,7 @@ const handleStartEngine = async () => {
               <a
                 href="#"
                 className={styles.downloadLink}
-                onClick={(e) => { e.preventDefault(); handleDownloadAll(); }}
+                onClick={(e) => { e.preventDefault(); void handleDownloadAll() }}
               >
                 <Download size={16} />
                 Download{doneSlots.length > 1 ? ' all (.zip)' : ''}

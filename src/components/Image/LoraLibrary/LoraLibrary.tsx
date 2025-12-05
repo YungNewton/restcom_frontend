@@ -5,7 +5,10 @@ import {
   Search, Star, StarOff, Plus, X, Pencil, Trash2,
   Download, RefreshCcw, Grid, List, Info, ChevronLeft, ChevronRight
 } from 'lucide-react'
+import axios from 'axios'
 import AddLoRa from './AddLoRa'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 /** LoRA shape coming from backend */
 export type Lora = {
@@ -21,15 +24,15 @@ export type Lora = {
   sizeMB?: number
   createdAt?: string
   isFavorite?: boolean
-  /** NEW: flag to distinguish user's LoRAs from defaults */
+  /** flag to distinguish user's LoRAs from defaults */
   isMine?: boolean
 }
 
-/** Component API — wire these to your backend */
+/** Component API — can be controlled externally, but self-wires to backend if not provided */
 export type LoraLibraryProps = {
-  items?: Lora[] // dynamic data from backend
+  items?: Lora[] // if provided, component becomes "dumb view" over this list
   isLoading?: boolean
-  onRefresh?: () => void
+  onRefresh?: () => Promise<void> | void
   onAdd?: (payload: {
     name: string
     type: NonNullable<Lora['type']>
@@ -43,74 +46,6 @@ export type LoraLibraryProps = {
   onDownload?: (id: string) => Promise<void> | void
   onOpenDetails?: (lora: Lora) => void
 }
-
-const mock: Lora[] = [
-  {
-    id: 'two-image-demo',
-    name: 'Two Image Sample',
-    author: '@demo',
-    type: 'image',
-    previewUrl:
-      'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1200&auto=format&fit=crop',
-    sampleUrls: [
-      'https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?q=80&w=1200&auto=format&fit=crop'
-    ],
-    tags: ['portrait', 'studio'],
-    downloads: 42,
-    favorites: 7,
-    sizeMB: 64,
-    createdAt: new Date().toISOString(),
-    isFavorite: false,
-    isMine: true
-  },
-  {
-    id: 'restcom-style',
-    name: 'Restcom Style',
-    author: '@restcom',
-    type: 'image',
-    previewUrl:
-      'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=1200&auto=format&fit=crop',
-    sampleUrls: [
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=1200&auto=format&fit=crop'
-    ],
-    tags: ['portrait', 'studio', 'cinematic'],
-    downloads: 1253,
-    favorites: 210,
-    sizeMB: 128,
-    createdAt: new Date(Date.now() - 86400 * 1000 * 4).toISOString(),
-    isFavorite: true,
-    isMine: true
-  },
-  {
-    id: 'arch-lite',
-    name: 'ArchViz Lite',
-    author: '@blockcraft',
-    type: 'image',
-    previewUrl:
-      'https://images.unsplash.com/photo-1501183638710-841dd1904471?q=80&w=1200&auto=format&fit=crop',
-    tags: ['architecture', 'interior', 'minimal'],
-    downloads: 842,
-    favorites: 97,
-    sizeMB: 64,
-    createdAt: new Date(Date.now() - 86400 * 1000 * 9).toISOString(),
-    isMine: false
-  },
-  {
-    id: 'anime-ink',
-    name: 'Anime Ink',
-    author: '@graphica',
-    type: 'image',
-    previewUrl:
-      'https://images.unsplash.com/photo-1541963463532-d68292c34b19?q=80&w=1200&auto=format&fit=crop',
-    tags: ['anime', 'ink', 'stylized'],
-    downloads: 1902,
-    favorites: 355,
-    sizeMB: 96,
-    createdAt: new Date(Date.now() - 86400 * 1000 * 13).toISOString(),
-    isFavorite: false,
-    isMine: false
-  }
-]
 
 function cn(...xs: Array<string | false | undefined>) {
   return xs.filter(Boolean).join(' ')
@@ -147,7 +82,13 @@ export default function LoraLibrary({
   onDownload,
   onOpenDetails
 }: LoraLibraryProps) {
-  const data = items && items.length ? items : mock
+  // Local backing store when parent does not pass `items`
+  const [remoteItems, setRemoteItems] = useState<Lora[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const data = items ?? remoteItems
+  const effectiveLoading = isLoading ?? loading
 
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [query, setQuery] = useState('')
@@ -166,6 +107,9 @@ export default function LoraLibrary({
 
   // gallery state (drawer only)
   const [galleryIndex, setGalleryIndex] = useState(0)
+
+  // engine status (standalone page, independent of Image.tsx)
+  const [engineOnline, setEngineOnline] = useState(false)
 
   const allTags = useMemo(() => {
     const s = new Set<string>()
@@ -208,6 +152,167 @@ export default function LoraLibrary({
     return out
   }, [data, query, activeTags, sort, onlyFavs, favOverrides, ownerFilter])
 
+  // -------- Backend wiring (defaults) --------
+
+  async function fetchLoras() {
+    // If parent controls data, don't auto-fetch
+    if (items) return
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await axios.get<Lora[]>(`${API_BASE_URL}/images/loras/`, {
+        withCredentials: true
+      })
+      setRemoteItems(res.data)
+    } catch (err) {
+      console.error('Failed to load LoRAs', err)
+      setError('Failed to load LoRAs')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchLoras()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function defaultRefresh() {
+    await fetchLoras()
+  }
+
+  async function defaultToggleFavorite(id: string, next: boolean) {
+    try {
+      await axios.post(
+        `${API_BASE_URL}/images/loras/${id}/favorite/`,
+        { is_favorite: next },
+        { withCredentials: true }
+      )
+      // Optionally refresh counts from backend
+      fetchLoras()
+    } catch (err) {
+      console.error('Failed to toggle favorite', err)
+    }
+  }
+
+  async function defaultRename(id: string, nextName: string) {
+    try {
+      await axios.patch(
+        `${API_BASE_URL}/images/loras/${id}/`,
+        { name: nextName },
+        { withCredentials: true }
+      )
+      setRemoteItems(prev =>
+        prev.map(l => (l.id === id ? { ...l, name: nextName } : l))
+      )
+    } catch (err) {
+      console.error('Failed to rename LoRA', err)
+    }
+  }
+
+  async function defaultDelete(ids: string[]) {
+    try {
+      if (ids.length === 1) {
+        await axios.delete(`${API_BASE_URL}/images/loras/${ids[0]}/`, {
+          withCredentials: true
+        })
+      } else if (ids.length > 1) {
+        await axios.post(
+          `${API_BASE_URL}/images/loras/bulk-delete/`,
+          { ids },
+          { withCredentials: true }
+        )
+      }
+      setRemoteItems(prev => prev.filter(l => !ids.includes(l.id)))
+    } catch (err) {
+      console.error('Failed to delete LoRAs', err)
+    }
+  }
+
+  async function defaultDownload(id: string) {
+    try {
+      const res = await axios.post(
+        `${API_BASE_URL}/images/loras/${id}/download/`,
+        {},
+        { withCredentials: true }
+      )
+      const url = (res.data && (res.data as any).url) as string | undefined
+      if (url) {
+        window.open(url, '_blank')
+      } else {
+        console.warn('Download URL not provided by backend yet')
+      }
+    } catch (err) {
+      console.error('Failed to download LoRA', err)
+    }
+  }
+
+  async function defaultAdd(payload: {
+    name: string
+    type: NonNullable<Lora['type']>
+    file?: File
+    url?: string
+    tags: string[]
+  }) {
+    try {
+      // For now we ignore file/url here; you’ll later wire this to /upload
+      const res = await axios.post(
+        `${API_BASE_URL}/images/loras/`,
+        {
+          name: payload.name,
+          type: payload.type,
+          tags: payload.tags
+        },
+        { withCredentials: true }
+      )
+      const created = res.data as Lora
+      setRemoteItems(prev => [created, ...prev])
+    } catch (err) {
+      console.error('Failed to create LoRA', err)
+    }
+  }
+
+  // -------- Engine status polling (standalone, like Image.tsx but simpler) --------
+  useEffect(() => {
+    if (!API_BASE_URL) return
+
+    const base = API_BASE_URL.replace(/\/+$/, '')
+    let cancelled = false
+    let tick: number | undefined
+    const controller = new AbortController()
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`${base}/images/krea/runpod-status/`, {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        })
+        if (!res.ok) throw new Error(String(res.status))
+        const data = await res.json()
+        setEngineOnline(!!data?.online)
+      } catch {
+        if (!controller.signal.aborted) {
+          setEngineOnline(false)
+        }
+      } finally {
+        if (!cancelled) {
+          tick = window.setTimeout(poll, 2500) as unknown as number
+        }
+      }
+    }
+
+    poll()
+
+    return () => {
+      cancelled = true
+      if (tick) window.clearTimeout(tick)
+      controller.abort()
+    }
+  }, [])
+
+  // -------- UI handlers --------
+
   function toggleSelected(id: string) {
     setSelected(prev => {
       const next = new Set(prev)
@@ -218,7 +323,11 @@ export default function LoraLibrary({
 
   function handleRefreshAndClear() {
     setActiveTags([]) // clear tag filters
-    onRefresh?.()
+    if (onRefresh) {
+      onRefresh()
+    } else {
+      defaultRefresh()
+    }
   }
 
   function pulseFav(id: string) {
@@ -237,7 +346,12 @@ export default function LoraLibrary({
     const next = !effectiveFav(l)
     pulseFav(l.id)
     setFavOverrides(prev => ({ ...prev, [l.id]: next }))
-    onToggleFavorite?.(l.id, next)
+
+    if (onToggleFavorite) {
+      await onToggleFavorite(l.id, next)
+    } else {
+      await defaultToggleFavorite(l.id, next)
+    }
   }
 
   function clearSelection() {
@@ -252,7 +366,11 @@ export default function LoraLibrary({
   }
 
   async function handleDelete(ids: string[]) {
-    onDelete?.(ids)
+    if (onDelete) {
+      await onDelete(ids)
+    } else {
+      await defaultDelete(ids)
+    }
     clearSelection()
   }
 
@@ -288,567 +406,625 @@ export default function LoraLibrary({
   ])
 
   return (
-    <div className={styles.wrap} data-view={view}>
-      {/* Header */}
-      <div className={styles.headerRow}>
-        <div>
-          <h2 className={styles.title}>LoRA Library</h2>
-          <div className={styles.subtitle}>Browse through our collection of LoRAs.</div>
-        </div>
-        <div className={styles.headerActions}>
-          {/* Toggle with custom tooltip + centered icon */}
-          <div
-            className={styles.tooltipWrapper}
-            data-tooltip={view === 'grid' ? 'List layout' : 'Grid layout'}
-            aria-label={view === 'grid' ? 'Switch to list layout' : 'Switch to grid layout'}
-          >
-            <button
-              className={styles.iconBtn}
-              onClick={() => setView(v => (v === 'grid' ? 'list' : 'grid'))}
-              type="button"
-            >
-              {view === 'grid' ? <List size={18} /> : <Grid size={18} />}
-            </button>
-          </div>
-
-          <button className={styles.primaryBtn} onClick={() => setAddOpen(true)}>
-            <Plus size={16} /> Add LoRA
-          </button>
-        </div>
+    <div className={styles.page}>
+      {/* Status pill OUTSIDE the main panel, but inside the page */}
+      <div
+        className={`${styles.engineStatusInline} ${
+          engineOnline ? styles.onlineStatus : ''
+        }`}
+      >
+        <span
+          className={`${styles.statusDot} ${
+            engineOnline ? styles.online : styles.offline
+          }`}
+        />
+        <span className={styles.engineStatusText}>
+          Image engine {engineOnline ? 'Online' : 'Offline'}
+        </span>
       </div>
 
-      {/* Toolbar */}
-      <div className={styles.toolbar}>
-        <div className={styles.searchBox}>
-          <Search className={styles.searchIcon} size={16} />
-          <input
-            className={styles.searchInput}
-            placeholder="search name, tag, author…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-        </div>
-
-        <div className={styles.sortChips}>
-          <button
-            className={cn(styles.chip, sort === 'recent' && styles.chipActive)}
-            onClick={() => setSort('recent')}
-            type="button"
-          >
-            Recent
-          </button>
-          <button
-            className={cn(styles.chip, sort === 'popular' && styles.chipActive)}
-            onClick={() => setSort('popular')}
-            type="button"
-          >
-            Popular
-          </button>
-          <button
-            className={cn(styles.chip, sort === 'name' && styles.chipActive)}
-            onClick={() => setSort('name')}
-            type="button"
-          >
-            A–Z
-          </button>
-
-          <div
-            className={styles.tooltipWrapper}
-            data-tooltip={onlyFavs ? 'Showing favourites' : 'Show favourites'}
-          >
-            <button
-              className={cn(styles.chip, onlyFavs && styles.chipActive)}
-              onClick={() => setOnlyFavs(v => !v)}
-              aria-pressed={onlyFavs}
-              type="button"
-            >
-              <Star size={14} />
-              <span>Favourites</span>
-            </button>
+      {/* Main LoRA Library panel */}
+      <div className={styles.wrap} data-view={view}>
+        {/* Header */}
+        <div className={styles.headerRow}>
+          <div>
+            <h2 className={styles.title}>LoRA Library</h2>
+            <div className={styles.subtitle}>Browse through our collection of LoRAs.</div>
           </div>
-
-          {/* Owner filter chips */}
-          <span className={styles.muted} style={{ opacity: .5, padding: '0 .25rem' }} aria-hidden="true">|</span>
-          <button
-            className={cn(styles.chip, ownerFilter === 'all' && styles.chipActive)}
-            onClick={() => setOwnerFilter('all')}
-            type="button"
-          >
-            All
-          </button>
-          <button
-            className={cn(styles.chip, ownerFilter === 'mine' && styles.chipActive)}
-            onClick={() => setOwnerFilter('mine')}
-            type="button"
-          >
-            My LoRAs
-          </button>
-          <button
-            className={cn(styles.chip, ownerFilter === 'default' && styles.chipActive)}
-            onClick={() => setOwnerFilter('default')}
-            type="button"
-          >
-            Defaults
-          </button>
-        </div>
-
-        <div className={styles.tagsScroller}>
-          {allTags.map(t => {
-            const active = activeTags.includes(t)
-            return (
-              <button
-                key={t}
-                className={cn(styles.tagBtn, active && styles.tagBtnActive)}
-                onClick={() =>
-                  setActiveTags(prev =>
-                    active ? prev.filter(x => x !== t) : [...prev, t]
-                  )
-                }
-                type="button"
-              >
-                #{t}
-              </button>
-            )
-          })}
-        </div>
-
-        <div className={styles.toolbarRight}>
-          {selected.size > 0 ? (
-            <>
-              {/* Use button (up to 3) */}
-              <button
-                className={styles.primaryBtn}
-                onClick={handleUseSelected}
-                type="button"
-                title={`Use up to ${MAX_USE} selected`}
-              >
-                Use ({Math.min(selected.size, MAX_USE)}/{MAX_USE})
-              </button>
-
-              <button
-                className={styles.dangerBtn}
-                onClick={() => handleDelete(Array.from(selected))}
-                type="button"
-              >
-                <Trash2 size={16} /> Delete ({selected.size})
-              </button>
-              <button className={styles.secondaryBtn} onClick={clearSelection} type="button">
-                Clear
-              </button>
-            </>
-          ) : (
-            // icon-only, low-attention, with tooltip, clears tags too
+          <div className={styles.headerActions}>
+            {/* Toggle with custom tooltip + centered icon */}
             <div
               className={styles.tooltipWrapper}
-              data-tooltip="Refresh"
-              aria-label="Refresh and clear all selected tags"
+              data-tooltip={view === 'grid' ? 'List layout' : 'Grid layout'}
+              aria-label={view === 'grid' ? 'Switch to list layout' : 'Switch to grid layout'}
             >
               <button
-                className={`${styles.iconBtn} ${styles.iconBtnGhost}`}
-                onClick={handleRefreshAndClear}
+                className={styles.iconBtn}
+                onClick={() => setView(v => (v === 'grid' ? 'list' : 'grid'))}
                 type="button"
               >
-                <RefreshCcw size={16} />
+                {view === 'grid' ? <List size={18} /> : <Grid size={18} />}
               </button>
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Content */}
-      <div className={styles.contentWrap}>
-        {isLoading ? (
-          <div className={styles.loading}>Loading…</div>
-        ) : filtered.length === 0 ? (
-          <div className={styles.empty}>
-            <Info size={18} />
-            <div>No LoRAs found. Try clearing filters or add a new one.</div>
+            <button className={styles.primaryBtn} onClick={() => setAddOpen(true)} type="button">
+              <Plus size={16} /> Add LoRA
+            </button>
           </div>
-        ) : view === 'grid' ? (
-          <div className={styles.grid}>
-            {filtered.map(l => {
-              const fav = effectiveFav(l)
-              const gallery = galleryFor(l)
-              const primary = gallery[0]
+        </div>
 
+        {/* Toolbar */}
+        <div className={styles.toolbar}>
+          <div className={styles.searchBox}>
+            <Search className={styles.searchIcon} size={16} />
+            <input
+              className={styles.searchInput}
+              placeholder="search name, tag, author…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
+          </div>
+
+          <div className={styles.sortChips}>
+            <button
+              className={cn(styles.chip, sort === 'recent' && styles.chipActive)}
+              onClick={() => setSort('recent')}
+              type="button"
+            >
+              Recent
+            </button>
+            <button
+              className={cn(styles.chip, sort === 'popular' && styles.chipActive)}
+              onClick={() => setSort('popular')}
+              type="button"
+            >
+              Popular
+            </button>
+            <button
+              className={cn(styles.chip, sort === 'name' && styles.chipActive)}
+              onClick={() => setSort('name')}
+              type="button"
+            >
+              A–Z
+            </button>
+
+            <div
+              className={styles.tooltipWrapper}
+              data-tooltip={onlyFavs ? 'Showing favourites' : 'Show favourites'}
+            >
+              <button
+                className={cn(styles.chip, onlyFavs && styles.chipActive)}
+                onClick={() => setOnlyFavs(v => !v)}
+                aria-pressed={onlyFavs}
+                type="button"
+              >
+                <Star size={14} />
+                <span>Favourites</span>
+              </button>
+            </div>
+
+            {/* Owner filter chips */}
+            <span
+              className={styles.muted}
+              style={{ opacity: .5, padding: '0 .25rem' }}
+              aria-hidden="true"
+            >
+              |
+            </span>
+            <button
+              className={cn(styles.chip, ownerFilter === 'all' && styles.chipActive)}
+              onClick={() => setOwnerFilter('all')}
+              type="button"
+            >
+              All
+            </button>
+            <button
+              className={cn(styles.chip, ownerFilter === 'mine' && styles.chipActive)}
+              onClick={() => setOwnerFilter('mine')}
+              type="button"
+            >
+              My LoRAs
+            </button>
+            <button
+              className={cn(styles.chip, ownerFilter === 'default' && styles.chipActive)}
+              onClick={() => setOwnerFilter('default')}
+              type="button"
+            >
+              Defaults
+            </button>
+          </div>
+
+          <div className={styles.tagsScroller}>
+            {allTags.map(t => {
+              const active = activeTags.includes(t)
               return (
-                <article
-                  key={l.id}
-                  className={cn(styles.card, selected.has(l.id) && styles.cardSelected)}
+                <button
+                  key={t}
+                  className={cn(styles.tagBtn, active && styles.tagBtnActive)}
+                  onClick={() =>
+                    setActiveTags(prev =>
+                      active ? prev.filter(x => x !== t) : [...prev, t]
+                    )
+                  }
+                  type="button"
                 >
-                  <div className={styles.cardMedia} onClick={() => openDetails(l)}>
-                    {primary ? (
-                      <img src={primary} alt={l.name} />
-                    ) : (
-                      <div className={styles.noPreview}>No preview</div>
-                    )}
-
-                    <button
-                      className={cn(
-                        styles.favBtn,
-                        fav && styles.favActive,
-                        favPulsing.has(l.id) && styles.favPulse
-                      )}
-                      onClick={e => { e.stopPropagation(); handleFavorite(l); }}
-                      title={fav ? 'Unfavorite' : 'Favorite'}
-                      aria-label={fav ? 'Unfavorite' : 'Favorite'}
-                    >
-                      {fav ? (
-                        <Star size={16} className={cn(styles.favIcon, styles.favIconFilled)} />
-                      ) : (
-                        <StarOff size={16} className={styles.favIcon} />
-                      )}
-                    </button>
-                  </div>
-
-                  <div className={styles.cardBody}>
-                    <div className={styles.cardTitleRow}>
-                      <h3
-                        className={styles.cardTitle}
-                        title={l.name}
-                        onClick={() => openDetails(l)}
-                      >
-                        {l.name}
-                      </h3>
-                      <div className={styles.menu}>
-                        <div
-                          className={styles.tooltipWrapper}
-                          data-tooltip={selected.has(l.id) ? 'Unselect' : 'Select'}
-                        >
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => toggleSelected(l.id)}
-                            aria-pressed={selected.has(l.id)}
-                            aria-label={selected.has(l.id) ? 'Unselect' : 'Select'}
-                            type="button"
-                          >
-                            ✓
-                          </button>
-                        </div>
-
-                        <div className={styles.tooltipWrapper} data-tooltip="Rename">
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => promptRename(l, onRename)}
-                            aria-label="Rename"
-                            type="button"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                        </div>
-
-                        <div className={styles.tooltipWrapper} data-tooltip="Download">
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => onDownload?.(l.id)}
-                            aria-label="Download"
-                            type="button"
-                          >
-                            <Download size={16} />
-                          </button>
-                        </div>
-
-                        <div className={styles.tooltipWrapper} data-tooltip="Delete">
-                          <button
-                            className={styles.iconBtnDanger}
-                            onClick={() => handleDelete([l.id])}
-                            aria-label="Delete"
-                            type="button"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className={styles.cardMeta}>
-                      <span className={styles.muted}>{l.author || 'Unknown'}</span>
-                      <span className={styles.muted}>{formatSizeMB(l.sizeMB)}</span>
-                    </div>
-
-                    <div className={styles.tagsRow}>
-                      {(l.tags || []).slice(0, 4).map(t => (
-                        <span key={t} className={styles.tagChip}>#{t}</span>
-                      ))}
-                    </div>
-
-                    <div className={styles.footerRow}>
-                      <span className={styles.muted}>Added {timeAgo(l.createdAt)}</span>
-                      {!!l.downloads && (
-                        <span className={styles.muted}>{l.downloads} downloads</span>
-                      )}
-                    </div>
-                  </div>
-                </article>
+                  #{t}
+                </button>
               )
             })}
           </div>
-        ) : (
-          <div className={styles.list}>
-            {filtered.map(l => {
-              const fav = effectiveFav(l)
-              const gallery = galleryFor(l)
-              const primary = gallery[0]
 
-              return (
-                <article
-                  key={l.id}
-                  className={cn(styles.row, selected.has(l.id) && styles.cardSelected)}
-                  onClick={() => openDetails(l)}
+          <div className={styles.toolbarRight}>
+            {selected.size > 0 ? (
+              <>
+                {/* Use button (up to 3) */}
+                <button
+                  className={styles.primaryBtn}
+                  onClick={handleUseSelected}
+                  type="button"
+                  title={`Use up to ${MAX_USE} selected`}
                 >
-                  <div className={styles.rowThumb}>
-                    {primary ? (
-                      <img src={primary} alt={l.name} />
-                    ) : (
-                      <div className={styles.noPreview}>No preview</div>
-                    )}
-                  </div>
+                  Use ({Math.min(selected.size, MAX_USE)}/{MAX_USE})
+                </button>
 
-                  <div className={styles.rowMain}>
-                    <div className={styles.rowTop}>
-                      <div className={styles.rowTitleWrap}>
-                        <h3 className={styles.rowTitle}>{l.name}</h3>
-                        <div className={styles.rowSub}>{l.author || 'Unknown'}</div>
-                      </div>
-                      <div
-                        className={styles.rowActions}
-                        onClick={e => e.stopPropagation()}
+                <button
+                  className={styles.dangerBtn}
+                  onClick={() => handleDelete(Array.from(selected))}
+                  type="button"
+                >
+                  <Trash2 size={16} /> Delete ({selected.size})
+                </button>
+                <button
+                  className={styles.secondaryBtn}
+                  onClick={clearSelection}
+                  type="button"
+                >
+                  Clear
+                </button>
+              </>
+            ) : (
+              // icon-only, low-attention, with tooltip, clears tags too
+              <div
+                className={styles.tooltipWrapper}
+                data-tooltip="Refresh"
+                aria-label="Refresh and clear all selected tags"
+              >
+                <button
+                  className={`${styles.iconBtn} ${styles.iconBtnGhost}`}
+                  onClick={handleRefreshAndClear}
+                  type="button"
+                >
+                  <RefreshCcw size={16} />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className={styles.contentWrap}>
+          {effectiveLoading ? (
+            <div className={styles.loading}>Loading…</div>
+          ) : error ? (
+            <div className={styles.empty}>
+              <Info size={18} />
+              <div>{error}</div>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className={styles.empty}>
+              <Info size={18} />
+              <div>No LoRAs found. Try clearing filters or add a new one.</div>
+            </div>
+          ) : view === 'grid' ? (
+            <div className={styles.grid}>
+              {filtered.map(l => {
+                const fav = effectiveFav(l)
+                const gallery = galleryFor(l)
+                const primary = gallery[0]
+
+                return (
+                  <article
+                    key={l.id}
+                    className={cn(styles.card, selected.has(l.id) && styles.cardSelected)}
+                  >
+                    <div className={styles.cardMedia} onClick={() => openDetails(l)}>
+                      {primary ? (
+                        <img src={primary} alt={l.name} />
+                      ) : (
+                        <div className={styles.noPreview}>No preview</div>
+                      )}
+
+                      <button
+                        className={cn(
+                          styles.favBtn,
+                          fav && styles.favActive,
+                          favPulsing.has(l.id) && styles.favPulse
+                        )}
+                        onClick={e => { e.stopPropagation(); handleFavorite(l); }}
+                        title={fav ? 'Unfavorite' : 'Favorite'}
+                        aria-label={fav ? 'Unfavorite' : 'Favorite'}
+                        type="button"
                       >
-                        <div
-                          className={styles.tooltipWrapper}
-                          data-tooltip={selected.has(l.id) ? 'Unselect' : 'Select'}
-                        >
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => toggleSelected(l.id)}
-                            aria-pressed={selected.has(l.id)}
-                            aria-label={selected.has(l.id) ? 'Unselect' : 'Select'}
-                            type="button"
-                          >
-                            ✓
-                          </button>
-                        </div>
-
-                        <div
-                          className={styles.tooltipWrapper}
-                          data-tooltip={fav ? 'Unfavorite' : 'Favorite'}
-                        >
-                          <button
-                            className={cn(
-                              styles.iconBtn,
-                              fav && styles.favActiveBtn,
-                              favPulsing.has(l.id) && styles.favPulseBtn
-                            )}
-                            onClick={() => handleFavorite(l)}
-                            aria-label={fav ? 'Unfavorite' : 'Favorite'}
-                            type="button"
-                          >
-                            {fav ? (
-                              <Star size={16} className={cn(styles.favIcon, styles.favIconFilled)} />
-                            ) : (
-                              <StarOff size={16} className={styles.favIcon} />
-                            )}
-                          </button>
-                        </div>
-
-                        <div className={styles.tooltipWrapper} data-tooltip="Rename">
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => promptRename(l, onRename)}
-                            aria-label="Rename"
-                            type="button"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                        </div>
-
-                        <div className={styles.tooltipWrapper} data-tooltip="Download">
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => onDownload?.(l.id)}
-                            aria-label="Download"
-                            type="button"
-                          >
-                            <Download size={16} />
-                          </button>
-                        </div>
-
-                        <div className={styles.tooltipWrapper} data-tooltip="Delete">
-                          <button
-                            className={styles.iconBtnDanger}
-                            onClick={() => handleDelete([l.id])}
-                            aria-label="Delete"
-                            type="button"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
+                        {fav ? (
+                          <Star size={16} className={cn(styles.favIcon, styles.favIconFilled)} />
+                        ) : (
+                          <StarOff size={16} className={styles.favIcon} />
+                        )}
+                      </button>
                     </div>
 
-                    <div className={styles.rowBottom}>
+                    <div className={styles.cardBody}>
+                      <div className={styles.cardTitleRow}>
+                        <h3
+                          className={styles.cardTitle}
+                          title={l.name}
+                          onClick={() => openDetails(l)}
+                        >
+                          {l.name}
+                        </h3>
+                        <div className={styles.menu}>
+                          <div
+                            className={styles.tooltipWrapper}
+                            data-tooltip={selected.has(l.id) ? 'Unselect' : 'Select'}
+                          >
+                            <button
+                              className={styles.iconBtn}
+                              onClick={() => toggleSelected(l.id)}
+                              aria-pressed={selected.has(l.id)}
+                              aria-label={selected.has(l.id) ? 'Unselect' : 'Select'}
+                              type="button"
+                            >
+                              ✓
+                            </button>
+                          </div>
+
+                          <div className={styles.tooltipWrapper} data-tooltip="Rename">
+                            <button
+                              className={styles.iconBtn}
+                              onClick={() => promptRename(l, onRename ?? defaultRename)}
+                              aria-label="Rename"
+                              type="button"
+                            >
+                              <Pencil size={16} />
+                            </button>
+                          </div>
+
+                          <div className={styles.tooltipWrapper} data-tooltip="Download">
+                            <button
+                              className={styles.iconBtn}
+                              onClick={() =>
+                                (onDownload ? onDownload(l.id) : defaultDownload(l.id))
+                              }
+                              aria-label="Download"
+                              type="button"
+                            >
+                              <Download size={16} />
+                            </button>
+                          </div>
+
+                          <div className={styles.tooltipWrapper} data-tooltip="Delete">
+                            <button
+                              className={styles.iconBtnDanger}
+                              onClick={() => handleDelete([l.id])}
+                              aria-label="Delete"
+                              type="button"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={styles.cardMeta}>
+                        <span className={styles.muted}>{l.author || 'Unknown'}</span>
+                        <span className={styles.muted}>{formatSizeMB(l.sizeMB)}</span>
+                      </div>
+
                       <div className={styles.tagsRow}>
-                        {(l.tags || []).slice(0, 6).map(t => (
+                        {(l.tags || []).slice(0, 4).map(t => (
                           <span key={t} className={styles.tagChip}>#{t}</span>
                         ))}
                       </div>
-                      <div className={styles.rowMetaRight}>
-                        <span className={styles.muted}>{formatSizeMB(l.sizeMB)}</span>
+
+                      <div className={styles.footerRow}>
                         <span className={styles.muted}>Added {timeAgo(l.createdAt)}</span>
+                        {!!l.downloads && (
+                          <span className={styles.muted}>{l.downloads} downloads</span>
+                        )}
                       </div>
                     </div>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Details Drawer */}
-      {detailsOpen && detailsItem && (
-        <div className={styles.drawerBackdrop} onClick={() => setDetailsOpen(false)}>
-          <div
-            className={styles.drawer}
-            onClick={e => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className={styles.drawerHeader}>
-              <h3 className={styles.drawerTitle}>{detailsItem.name}</h3>
-              <button className={styles.iconBtn} onClick={() => setDetailsOpen(false)} aria-label="Close" type="button">
-                <X size={18} />
-              </button>
+                  </article>
+                )
+              })}
             </div>
+          ) : (
+            <div className={styles.list}>
+              {filtered.map(l => {
+                const fav = effectiveFav(l)
+                const gallery = galleryFor(l)
+                const primary = gallery[0]
 
-            <div className={styles.drawerBody}>
-              {/* --- Carousel media (arrows here only) --- */}
-              <div className={styles.drawerMedia}>
+                return (
+                  <article
+                    key={l.id}
+                    className={cn(styles.row, selected.has(l.id) && styles.cardSelected)}
+                    onClick={() => openDetails(l)}
+                  >
+                    <div className={styles.rowThumb}>
+                      {primary ? (
+                        <img src={primary} alt={l.name} />
+                      ) : (
+                        <div className={styles.noPreview}>No preview</div>
+                      )}
+                    </div>
+
+                    <div className={styles.rowMain}>
+                      <div className={styles.rowTop}>
+                        <div className={styles.rowTitleWrap}>
+                          <h3 className={styles.rowTitle}>{l.name}</h3>
+                          <div className={styles.rowSub}>{l.author || 'Unknown'}</div>
+                        </div>
+                        <div
+                          className={styles.rowActions}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <div
+                            className={styles.tooltipWrapper}
+                            data-tooltip={selected.has(l.id) ? 'Unselect' : 'Select'}
+                          >
+                            <button
+                              className={styles.iconBtn}
+                              onClick={() => toggleSelected(l.id)}
+                              aria-pressed={selected.has(l.id)}
+                              aria-label={selected.has(l.id) ? 'Unselect' : 'Select'}
+                              type="button"
+                            >
+                              ✓
+                            </button>
+                          </div>
+
+                          <div
+                            className={styles.tooltipWrapper}
+                            data-tooltip={fav ? 'Unfavorite' : 'Favorite'}
+                          >
+                            <button
+                              className={cn(
+                                styles.iconBtn,
+                                fav && styles.favActiveBtn,
+                                favPulsing.has(l.id) && styles.favPulseBtn
+                              )}
+                              onClick={() => handleFavorite(l)}
+                              aria-label={fav ? 'Unfavorite' : 'Favorite'}
+                              type="button"
+                            >
+                              {fav ? (
+                                <Star size={16} className={cn(styles.favIcon, styles.favIconFilled)} />
+                              ) : (
+                                <StarOff size={16} className={styles.favIcon} />
+                              )}
+                            </button>
+                          </div>
+
+                          <div className={styles.tooltipWrapper} data-tooltip="Rename">
+                            <button
+                              className={styles.iconBtn}
+                              onClick={() => promptRename(l, onRename ?? defaultRename)}
+                              aria-label="Rename"
+                              type="button"
+                            >
+                              <Pencil size={16} />
+                            </button>
+                          </div>
+
+                          <div className={styles.tooltipWrapper} data-tooltip="Download">
+                            <button
+                              className={styles.iconBtn}
+                              onClick={() =>
+                                (onDownload ? onDownload(l.id) : defaultDownload(l.id))
+                              }
+                              aria-label="Download"
+                              type="button"
+                            >
+                              <Download size={16} />
+                            </button>
+                          </div>
+
+                          <div className={styles.tooltipWrapper} data-tooltip="Delete">
+                            <button
+                              className={styles.iconBtnDanger}
+                              onClick={() => handleDelete([l.id])}
+                              aria-label="Delete"
+                              type="button"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={styles.rowBottom}>
+                        <div className={styles.tagsRow}>
+                          {(l.tags || []).slice(0, 6).map(t => (
+                            <span key={t} className={styles.tagChip}>#{t}</span>
+                          ))}
+                        </div>
+                        <div className={styles.rowMetaRight}>
+                          <span className={styles.muted}>{formatSizeMB(l.sizeMB)}</span>
+                          <span className={styles.muted}>Added {timeAgo(l.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Details Drawer */}
+        {detailsOpen && detailsItem && (
+          <div className={styles.drawerBackdrop} onClick={() => setDetailsOpen(false)}>
+            <div
+              className={styles.drawer}
+              onClick={e => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className={styles.drawerHeader}>
+                <h3 className={styles.drawerTitle}>{detailsItem.name}</h3>
+                <button
+                  className={styles.iconBtn}
+                  onClick={() => setDetailsOpen(false)}
+                  aria-label="Close"
+                  type="button"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className={styles.drawerBody}>
+                {/* --- Carousel media (arrows here only) --- */}
+                <div className={styles.drawerMedia}>
+                  {(() => {
+                    const gallery = [
+                      ...(detailsItem.previewUrl ? [detailsItem.previewUrl] : []),
+                      ...(detailsItem.sampleUrls || [])
+                    ]
+                    return gallery.length ? (
+                      <div className={styles.carouselWrap}>
+                        <img
+                          key={gallery[galleryIndex]}
+                          src={gallery[galleryIndex]}
+                          alt={`${detailsItem.name} – ${galleryIndex + 1}/${gallery.length}`}
+                          className={styles.carouselImg}
+                        />
+
+                        {gallery.length > 1 && (
+                          <>
+                            <div className={styles.tooltipWrapper} data-tooltip="Previous">
+                              <button
+                                className={`${styles.carouselBtn} ${styles.carouselBtnLeft}`}
+                                onClick={() =>
+                                  setGalleryIndex(i => (i + gallery.length - 1) % gallery.length)
+                                }
+                                aria-label="Previous image"
+                                type="button"
+                              >
+                                <ChevronLeft size={18} />
+                              </button>
+                            </div>
+
+                            <div className={styles.tooltipWrapper} data-tooltip="Next">
+                              <button
+                                className={`${styles.carouselBtn} ${styles.carouselBtnRight}`}
+                                onClick={() => setGalleryIndex(i => (i + 1) % gallery.length)}
+                                aria-label="Next image"
+                                type="button"
+                              >
+                                <ChevronRight size={18} />
+                              </button>
+                            </div>
+
+                            <div className={styles.carouselCounter}>
+                              {galleryIndex + 1} / {gallery.length}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.noPreview}>No preview</div>
+                    )
+                  })()}
+                </div>
+
+                {/* Thumbnails */}
                 {(() => {
                   const gallery = [
                     ...(detailsItem.previewUrl ? [detailsItem.previewUrl] : []),
                     ...(detailsItem.sampleUrls || [])
                   ]
-                  return gallery.length ? (
-                    <div className={styles.carouselWrap}>
-                      <img
-                        key={gallery[galleryIndex]}
-                        src={gallery[galleryIndex]}
-                        alt={`${detailsItem.name} – ${galleryIndex + 1}/${gallery.length}`}
-                        className={styles.carouselImg}
-                      />
-
-                      {gallery.length > 1 && (
-                        <>
-                          <div className={styles.tooltipWrapper} data-tooltip="Previous">
-                            <button
-                              className={`${styles.carouselBtn} ${styles.carouselBtnLeft}`}
-                              onClick={() =>
-                                setGalleryIndex(i => (i + gallery.length - 1) % gallery.length)
-                              }
-                              aria-label="Previous image"
-                              type="button"
-                            >
-                              <ChevronLeft size={18} />
-                            </button>
-                          </div>
-
-                          <div className={styles.tooltipWrapper} data-tooltip="Next">
-                            <button
-                              className={`${styles.carouselBtn} ${styles.carouselBtnRight}`}
-                              onClick={() => setGalleryIndex(i => (i + 1) % gallery.length)}
-                              aria-label="Next image"
-                              type="button"
-                            >
-                              <ChevronRight size={18} />
-                            </button>
-                          </div>
-
-                          <div className={styles.carouselCounter}>
-                            {galleryIndex + 1} / {gallery.length}
-                          </div>
-                        </>
-                      )}
+                  return gallery.length > 1 ? (
+                    <div className={styles.thumbsRow}>
+                      {gallery.map((u, i) => (
+                        <button
+                          key={u + i}
+                          className={cn(styles.thumb, i === galleryIndex && styles.thumbActive)}
+                          onClick={() => setGalleryIndex(i)}
+                          type="button"
+                          aria-label={`Show image ${i + 1}`}
+                        >
+                          <img src={u} alt={`thumb-${i + 1}`} />
+                        </button>
+                      ))}
                     </div>
-                  ) : (
-                    <div className={styles.noPreview}>No preview</div>
-                  )
+                  ) : null
                 })()}
+
+                <div className={styles.infoGrid}>
+                  <InfoStat label="Type" value={detailsItem.type || '—'} />
+                  <InfoStat label="Size" value={formatSizeMB(detailsItem.sizeMB)} />
+                  <InfoStat label="Favorites" value={String(detailsItem.favorites ?? 0)} />
+                  <InfoStat label="Downloads" value={String(detailsItem.downloads ?? 0)} />
+                  <InfoStat label="Added" value={timeAgo(detailsItem.createdAt)} />
+                  <InfoStat label="Author" value={detailsItem.author || '—'} />
+                </div>
+
+                <div className={styles.drawerTags}>
+                  {(detailsItem.tags || []).map(t => (
+                    <span key={t} className={styles.tagChip}>#{t}</span>
+                  ))}
+                </div>
               </div>
 
-              {/* Thumbnails */}
-              {(() => {
-                const gallery = [
-                  ...(detailsItem.previewUrl ? [detailsItem.previewUrl] : []),
-                  ...(detailsItem.sampleUrls || [])
-                ]
-                return gallery.length > 1 ? (
-                  <div className={styles.thumbsRow}>
-                    {gallery.map((u, i) => (
-                      <button
-                        key={u + i}
-                        className={cn(styles.thumb, i === galleryIndex && styles.thumbActive)}
-                        onClick={() => setGalleryIndex(i)}
-                        type="button"
-                        aria-label={`Show image ${i + 1}`}
-                      >
-                        <img src={u} alt={`thumb-${i + 1}`} />
-                      </button>
-                    ))}
-                  </div>
-                ) : null
-              })()}
-
-              <div className={styles.infoGrid}>
-                <InfoStat label="Type" value={detailsItem.type || '—'} />
-                <InfoStat label="Size" value={formatSizeMB(detailsItem.sizeMB)} />
-                <InfoStat label="Favorites" value={String(detailsItem.favorites ?? 0)} />
-                <InfoStat label="Downloads" value={String(detailsItem.downloads ?? 0)} />
-                <InfoStat label="Added" value={timeAgo(detailsItem.createdAt)} />
-                <InfoStat label="Author" value={detailsItem.author || '—'} />
-              </div>
-
-              <div className={styles.drawerTags}>
-                {(detailsItem.tags || []).map(t => (
-                  <span key={t} className={styles.tagChip}>#{t}</span>
-                ))}
-              </div>
-            </div>
-
-            <div className={styles.drawerFooter}>
-              <button className={styles.secondaryBtn} onClick={() => promptRename(detailsItem, onRename)} type="button">
-                <Pencil size={16} /> Rename
-              </button>
-              <button className={styles.secondaryBtn} onClick={() => onDownload?.(detailsItem.id)} type="button">
-                <Download size={16} /> Download
-              </button>
-              <div className={styles.flexGrow} />
-              {/* Drawer footer delete (icon-only with tooltip) */}
-              <div className={styles.tooltipWrapper} data-tooltip="Delete">
+              <div className={styles.drawerFooter}>
                 <button
-                  className={styles.iconBtnDanger}
-                  aria-label="Delete"
-                  onClick={() => { handleDelete([detailsItem.id]); setDetailsOpen(false); }}
+                  className={styles.secondaryBtn}
+                  onClick={() => promptRename(detailsItem, onRename ?? defaultRename)}
                   type="button"
                 >
-                  <Trash2 size={16} />
+                  <Pencil size={16} /> Rename
                 </button>
+                <button
+                  className={styles.secondaryBtn}
+                  onClick={() =>
+                    (onDownload ? onDownload(detailsItem.id) : defaultDownload(detailsItem.id))
+                  }
+                  type="button"
+                >
+                  <Download size={16} /> Download
+                </button>
+                <div className={styles.flexGrow} />
+                {/* Drawer footer delete (icon-only with tooltip) */}
+                <div className={styles.tooltipWrapper} data-tooltip="Delete">
+                  <button
+                    className={styles.iconBtnDanger}
+                    aria-label="Delete"
+                    onClick={() => { handleDelete([detailsItem.id]); setDetailsOpen(false); }}
+                    type="button"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Add Modal (external component) */}
-      {addOpen && (
-        <AddLoRa
-          onClose={() => setAddOpen(false)}
-          onSubmit={async payload => {
-            await onAdd?.(payload)
-            setAddOpen(false)
-          }}
-        />
-      )}
+        {/* Add Modal (external component) */}
+        {addOpen && (
+          <AddLoRa
+            onClose={() => setAddOpen(false)}
+            onSubmit={async payload => {
+              if (onAdd) {
+                await onAdd(payload)
+              } else {
+                await defaultAdd(payload)
+              }
+              setAddOpen(false)
+            }}
+          />
+        )}
+      </div>
     </div>
   )
 }

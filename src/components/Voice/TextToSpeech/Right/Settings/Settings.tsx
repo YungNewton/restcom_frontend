@@ -6,6 +6,8 @@ import avatar from '../../../../../assets/voice-avatar.png';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 
+type TTSFileFormat = 'mp3' | 'wav';
+
 type ClonedVoice = {
   id: string;
   name: string;
@@ -29,8 +31,11 @@ interface SettingsProps {
   setAutoDetect: (value: boolean) => void;
   fileName: string;
   setFileName: (value: string) => void;
-  fileFormat: string;
-  setFileFormat: (value: string) => void;
+
+  // 🔽 changed here
+  fileFormat: TTSFileFormat;
+  setFileFormat: (value: TTSFileFormat) => void;
+
   selectedVoice: { id: string; name: string; avatar: string };
   setSelectedVoice: (voice: { id: string; name: string; avatar: string }) => void;
   dialogueMode: boolean;
@@ -67,7 +72,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [seedInput, setSeedInput] = useState('');
 
   const languages = ['English'];
-  const fileFormats = ['mp3', 'wav'];
+  const fileFormats: TTSFileFormat[] = ['mp3', 'wav'];
 
   const handleSeedConfirm = () => {
     const validSeed = seedInput.trim() === '' ? '-1' : seedInput.trim();

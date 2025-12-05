@@ -92,6 +92,18 @@ const EmailAssistant = () => {
   const [isSendingEmails, setIsSendingEmails] = useState(false)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // NEW: refs to keep latest values visible in cleanup handlers
+  const emailTaskIdRef = useRef<string | null>(null)
+  const isSendingEmailsRef = useRef(false)
+
+  useEffect(() => {
+    emailTaskIdRef.current = emailTaskId
+  }, [emailTaskId])
+
+  useEffect(() => {
+    isSendingEmailsRef.current = isSendingEmails
+  }, [isSendingEmails])
+
   // WS streaming
   const wsRef = useRef<WebSocket | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
@@ -389,8 +401,33 @@ const EmailAssistant = () => {
   
   // ----- effects -----
   useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Browser refresh / tab close → best-effort cancel current email job
+      if (emailTaskIdRef.current && isSendingEmailsRef.current) {
+        // fire-and-forget, we can't await here
+        void handleCancelEmailTask()
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+
+      // SPA route change / component unmount
+
+      // 1) Stop task-status polling
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+
+      // 2) Best-effort cancel the email Celery task if it's still running
+      if (emailTaskIdRef.current && isSendingEmailsRef.current) {
+        void handleCancelEmailTask()
+      }
+
+      // 3) Close AI WebSocket + abort streaming controller + stop dots
       try {
         wsRef.current?.close()
       } catch {}
@@ -398,6 +435,7 @@ const EmailAssistant = () => {
       controllerRef.current?.abort()
     }
   }, [])
+
 
   useEffect(() => {
     const fetchPrompts = async () => {
