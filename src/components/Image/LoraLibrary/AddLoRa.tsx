@@ -90,7 +90,7 @@ export default function AddLoRa({
         .filter(Boolean),
     [tagInput]
   )
-  
+
   const [submitting, setSubmitting] = useState(false)
 
   // Engine start
@@ -208,9 +208,30 @@ export default function AddLoRa({
     onPickTrainFiles(e.dataTransfer?.files)
   }
 
-  // ------- Submit (requires engineOnline) -------
+  // ------- Submit (with validation toasts) -------
   async function submit() {
-    if (!name.trim()) return
+    // Basic name validation
+    if (!name.trim()) {
+      toast.error('Please enter a name for this LoRA.')
+      return
+    }
+
+    if (tab === 'upload') {
+      if (!file) {
+        toast.error('Please select a model file to upload.')
+        return
+      }
+      if (previewImages.length === 0) {
+        toast.error('Please add at least one preview image.')
+        return
+      }
+    } else {
+      if (trainImages.length === 0) {
+        toast.error('Please add at least one training image.')
+        return
+      }
+    }
+
     setSubmitting(true)
     try {
       if (tab === 'upload') {
@@ -341,32 +362,31 @@ export default function AddLoRa({
 
           {/* Tags */}
           <label className={styles.label}>Tags</label>
-            <div className={styles.tagAdder}>
-              <input
-                className={`${styles.input} ${styles.tagInput}`}
-                placeholder="portrait, anime, indoor…"
-                value={tagInput}
-                onChange={e => setTagInput(e.target.value)}
-                // optional: treat Enter like blur (no add, just prevent accidental submit)
-                onKeyDown={e => {
-                  if (e.key === 'Enter') e.preventDefault()
-                }}
-              />
-            </div>
+          <div className={styles.tagAdder}>
+            <input
+              className={`${styles.input} ${styles.tagInput}`}
+              placeholder="portrait, anime, indoor…"
+              value={tagInput}
+              onChange={e => setTagInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') e.preventDefault()
+              }}
+            />
+          </div>
 
-            {parsedTags.length > 0 && (
-              <div className={styles.tagsRow}>
-                {parsedTags.map(t => (
-                  <span
-                    key={t}
-                    className={styles.tagChip}
-                    onClick={() => removeTag(t)}  // removes from the string
-                  >
-                    #{t}
-                  </span>
-                ))}
-              </div>
-            )}
+          {parsedTags.length > 0 && (
+            <div className={styles.tagsRow}>
+              {parsedTags.map(t => (
+                <span
+                  key={t}
+                  className={styles.tagChip}
+                  onClick={() => removeTag(t)}
+                >
+                  #{t}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* ---------- Upload tab (model + previews) ---------- */}
           {tab === 'upload' && (
@@ -386,7 +406,6 @@ export default function AddLoRa({
                   hidden
                   onChange={e => {
                     onPickModelFile(e.target.files)
-                    // allow picking the same file again later
                     e.target.value = ''
                   }}
                 />
@@ -429,7 +448,7 @@ export default function AddLoRa({
               <div className={styles.previewBlock}>
                 <label className={styles.label}>Preview images (optional)</label>
                 <label
-                  className={styles.dropZone}
+                  className={styles.previewDropZone}
                   onDragOver={e => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -443,16 +462,13 @@ export default function AddLoRa({
                     hidden
                     onChange={e => {
                       onPickPreviewFiles(e.target.files)
-                      // IMPORTANT: reset so selecting the same file again still triggers onChange
                       e.target.value = ''
                     }}
                   />
-                  <div className={styles.dropInner}>
+                  <div className={styles.previewDropInner}>
                     <Upload size={18} />
                     <div>Click to upload or drag & drop</div>
-                    <div className={styles.subText}>
-                      JPG, PNG, WEBP
-                    </div>
+                    <div className={styles.subText}>JPG, PNG, WEBP</div>
                   </div>
                 </label>
 
@@ -571,7 +587,6 @@ export default function AddLoRa({
                   hidden
                   onChange={e => {
                     onPickTrainFiles(e.target.files)
-                    // same trick to allow re-selecting the same files
                     e.target.value = ''
                   }}
                 />
@@ -666,22 +681,14 @@ export default function AddLoRa({
             onClick={onClose}
             type="button"
           >
-            Cancel
+            Close
           </button>
 
-          {true ? (
+          {engineOnline ? (
             <button
               className={styles.primaryBtn}
               onClick={submit}
-              disabled={
-                submitting ||
-                !name.trim() ||
-                (
-                  tab === 'upload'
-                    ? (!file || previewImages.length === 0)
-                    : (trainImages.length === 0)
-                )
-              }              
+              disabled={submitting}
               type="button"
             >
               {tab === 'upload'

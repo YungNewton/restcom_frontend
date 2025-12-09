@@ -68,6 +68,18 @@ const MAX_USE = 3
 type Branch = 'krea' | 'kontext' | 'fill'
 const BRANCHES: Branch[] = ['krea', 'kontext', 'fill']
 
+const IMAGE_ENGINE_BASE_BY_BRANCH: Record<Branch, string | undefined> = {
+  krea: import.meta.env.VITE_IMAGE_KREA_ENGINE_API_BASE_URL,
+  kontext: import.meta.env.VITE_IMAGE_KONTEXT_ENGINE_API_BASE_URL,
+  fill: import.meta.env.VITE_IMAGE_FILL_ENGINE_API_BASE_URL,
+}
+
+function getEngineBaseForBranch(branch: Branch): string | null {
+  const raw = IMAGE_ENGINE_BASE_BY_BRANCH[branch]
+  if (!raw) return null
+  return raw.replace(/\/+$/, '')
+}
+
 export default function LoraLibrary({
   items,
   isLoading,
@@ -156,6 +168,90 @@ export default function LoraLibrary({
     })
     return out
   }, [data, query, activeTags, sort, onlyFavs, favOverrides, ownerFilter])
+
+  function startImageEngineKeepAlive() {
+    if (!API_BASE_URL) return undefined
+  
+    const base = API_BASE_URL.replace(/\/+$/, '')
+    let cancelled = false
+    let timer: number | undefined
+    let activeBranch: Branch | null = null
+  
+    async function detectOnlineBranch(): Promise<Branch | null> {
+      for (const branch of BRANCHES) {
+        try {
+          const res = await fetch(`${base}/images/${branch}/runpod-status/`, {
+            cache: 'no-store',
+            headers: { Accept: 'application/json' },
+          })
+          if (!res.ok) continue
+          const data = await res.json()
+          if (data?.online) {
+            // console.debug('Engine online on branch', branch)
+            return branch
+          }
+        } catch {
+          // ignore; just means this branch isn't reachable
+        }
+      }
+      return null
+    }
+  
+    const tick = async () => {
+      if (cancelled) return
+  
+      try {
+        // If we don't yet have an active branch, try to find one
+        if (!activeBranch) {
+          activeBranch = await detectOnlineBranch()
+          if (!activeBranch) {
+            // No engine online yet → try again soon
+            if (!cancelled) {
+              timer = window.setTimeout(tick, 15_000) as unknown as number
+            }
+            return
+          }
+        }
+  
+        // Ping the chosen branch to keep it warm.
+        const engineBase = getEngineBaseForBranch(activeBranch)
+        if (!engineBase) {
+          // env not configured for this branch → drop and re-detect later
+          activeBranch = null
+          if (!cancelled) {
+            timer = window.setTimeout(tick, 60_000) as unknown as number
+          }
+          return
+        }
+
+        // Ping the chosen engine directly to keep it warm.
+        await fetch(`${engineBase}/image/poll-activity/`, {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+          keepalive: true,
+        })
+      } catch {
+        // If it fails, drop the branch so we re-detect on next tick
+        activeBranch = null
+      } finally {
+        if (!cancelled) {
+          // Pod timeout is 5 minutes; 60s is plenty to keep it alive
+          timer = window.setTimeout(tick, 60_000) as unknown as number
+        }
+      }
+    }
+  
+    // Kick off immediately
+    tick()
+  
+    // Return cleanup
+    return () => {
+      cancelled = true
+      if (timer) {
+        window.clearTimeout(timer)
+      }
+    }
+  }
 
   // -------- Backend wiring (defaults) --------
 
@@ -263,7 +359,7 @@ export default function LoraLibrary({
     }
   }
 
-  // --- Wire AddLoRa modal to backend upload/train views WITH TOASTS ---
+// --- Wire AddLoRa modal to backend upload/train views WITH TOASTS ---
 async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean> {
   if (!API_BASE_URL) {
     console.error('API base URL not set')
@@ -283,7 +379,10 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
       ? 'LoRA uploaded successfully'
       : 'Training started for LoRA'
 
-  const t = toast.loading(loadingMsg)
+  const toastId = toast.loading(loadingMsg)
+
+  // 🔥 start image engine keep-alive while we’re working
+  const stopKeepAlive = startImageEngineKeepAlive()
 
   try {
     if (payload.mode === 'upload') {
@@ -349,12 +448,12 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
       setRemoteItems(prev => [created, ...prev])
     }
 
-    toast.dismiss(t)
+    toast.dismiss(toastId)
     toast.success(successMsg)
     return true
   } catch (err: any) {
     console.error('Failed to add/train LoRA', err)
-    toast.dismiss(t)
+    toast.dismiss(toastId)
     const fallback =
       payload.mode === 'upload'
         ? 'Failed to upload LoRA'
@@ -366,6 +465,11 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
       fallback
     toast.error(msg)
     return false
+  } finally {
+    // 🧹 always stop keep-alive
+    if (typeof stopKeepAlive === 'function') {
+      stopKeepAlive()
+    }
   }
 }
 
@@ -516,10 +620,19 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
   }, [detailsOpen, detailsItem])
 
   // helper to gather gallery URLs
-  const galleryFor = (l: Lora) => ([
-    ...(l.previewUrl ? [l.previewUrl] : []),
-    ...(l.sampleUrls || [])
-  ])
+  const galleryFor = (l: Lora) => {
+    const all = [
+      ...(l.previewUrl ? [l.previewUrl] : []),
+      ...(l.sampleUrls || []),
+    ]
+  
+    const seen = new Set<string>()
+    return all.filter(url => {
+      if (!url || seen.has(url)) return false
+      seen.add(url)
+      return true
+    })
+  }  
 
   return (
     <div className={styles.page}>
