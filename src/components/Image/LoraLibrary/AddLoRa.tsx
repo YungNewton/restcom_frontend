@@ -15,6 +15,10 @@ export type AddLoRaPayload =
       tags: string[]
       /** Optional preview images for this LoRA */
       previews?: File[]
+      /** Optional: recommended strength 0..1 (frontend-only metadata) */
+      recommendedStrength?: number
+      /** Optional: trigger word/sentence */
+      trigger?: string
     }
   | {
       mode: 'train'
@@ -26,6 +30,8 @@ export type AddLoRaPayload =
       images: Array<{ file: File; caption?: string }>
       estimatedSteps: number
       tags: string[]
+      /** Optional: recommended strength 0..1 (frontend-only metadata) */
+      recommendedStrength?: number
     }
 
 type Branch = 'krea' | 'kontext' | 'fill'
@@ -69,6 +75,11 @@ function normalizeBase(url?: string) {
   return url.replace(/\/+$/, '')
 }
 
+function clamp01(n: number) {
+  if (Number.isNaN(n)) return 0
+  return Math.min(1, Math.max(0, n))
+}
+
 export default function AddLoRa({
   onClose,
   onSubmit,
@@ -82,13 +93,25 @@ export default function AddLoRa({
   const [name, setName] = useState('')
   const [tagInput, setTagInput] = useState('')
 
+  // NEW: optional metadata fields (available on both tabs)
+  const [recommendedStrengthText, setRecommendedStrengthText] = useState('') // keep as text to allow empty
+  const [trigger, setTrigger] = useState('') // optional (both tabs)
+
+  const recommendedStrength = useMemo(() => {
+    const raw = recommendedStrengthText.trim()
+    if (!raw) return undefined
+    const n = Number(raw)
+    if (!Number.isFinite(n)) return undefined
+    return clamp01(n)
+  }, [recommendedStrengthText])
+
   const parsedTags = useMemo(
     () =>
       tagInput
         .split(',')
-        .map(t => t.trim())
+        .map((t) => t.trim())
         .filter(Boolean),
-    [tagInput]
+    [tagInput],
   )
 
   const [submitting, setSubmitting] = useState(false)
@@ -101,32 +124,29 @@ export default function AddLoRa({
   const [previewImages, setPreviewImages] = useState<PreviewImage[]>([])
 
   // Train
-  const [trigger, setTrigger] = useState('')
   const [repeatPerImage, setRepeatPerImage] = useState<number>(10)
   const [maxEpochs, setMaxEpochs] = useState<number>(1)
   const [trainImages, setTrainImages] = useState<TrainImage[]>([])
   const estimatedSteps = useMemo(
     () =>
       trainImages.length
-        ? trainImages.length *
-          Math.max(1, repeatPerImage) *
-          Math.max(1, maxEpochs)
+        ? trainImages.length * Math.max(1, repeatPerImage) * Math.max(1, maxEpochs)
         : 0,
-    [trainImages.length, repeatPerImage, maxEpochs]
+    [trainImages.length, repeatPerImage, maxEpochs],
   )
 
   // cleanup blob URLs on unmount
   useEffect(
     () => () => {
-      trainImages.forEach(i => URL.revokeObjectURL(i.url))
-      previewImages.forEach(i => URL.revokeObjectURL(i.url))
+      trainImages.forEach((i) => URL.revokeObjectURL(i.url))
+      previewImages.forEach((i) => URL.revokeObjectURL(i.url))
     },
-    [trainImages, previewImages]
+    [trainImages, previewImages],
   )
 
   // ------- Tags -------
   function removeTag(t: string) {
-    const next = parsedTags.filter(x => x !== t)
+    const next = parsedTags.filter((x) => x !== t)
     setTagInput(next.join(', '))
   }
 
@@ -147,14 +167,12 @@ export default function AddLoRa({
   // ------- Upload: preview images -------
   function onPickPreviewFiles(files?: FileList | null) {
     if (!files || !files.length) return
-    const next: PreviewImage[] = Array.from(files).map(f => ({
-      id: `${f.name}-${f.size}-${f.lastModified}-${Math.random()
-        .toString(36)
-        .slice(2)}`,
+    const next: PreviewImage[] = Array.from(files).map((f) => ({
+      id: `${f.name}-${f.size}-${f.lastModified}-${Math.random().toString(36).slice(2)}`,
       file: f,
       url: URL.createObjectURL(f),
     }))
-    setPreviewImages(prev => [...prev, ...next])
+    setPreviewImages((prev) => [...prev, ...next])
   }
 
   function onDropPreview(e: React.DragEvent<HTMLLabelElement>) {
@@ -163,16 +181,16 @@ export default function AddLoRa({
   }
 
   function removePreviewImage(id: string) {
-    setPreviewImages(prev => {
-      const it = prev.find(x => x.id === id)
+    setPreviewImages((prev) => {
+      const it = prev.find((x) => x.id === id)
       if (it) URL.revokeObjectURL(it.url)
-      return prev.filter(x => x.id !== id)
+      return prev.filter((x) => x.id !== id)
     })
   }
 
   function clearPreviewImages() {
-    setPreviewImages(prev => {
-      prev.forEach(x => URL.revokeObjectURL(x.url))
+    setPreviewImages((prev) => {
+      prev.forEach((x) => URL.revokeObjectURL(x.url))
       return []
     })
   }
@@ -180,26 +198,24 @@ export default function AddLoRa({
   // ------- Train: images -------
   function onPickTrainFiles(files?: FileList | null) {
     if (!files || !files.length) return
-    const next: TrainImage[] = Array.from(files).map(f => ({
-      id: `${f.name}-${f.size}-${f.lastModified}-${Math.random()
-        .toString(36)
-        .slice(2)}`,
+    const next: TrainImage[] = Array.from(files).map((f) => ({
+      id: `${f.name}-${f.size}-${f.lastModified}-${Math.random().toString(36).slice(2)}`,
       file: f,
       url: URL.createObjectURL(f),
       caption: '',
     }))
-    setTrainImages(prev => [...prev, ...next])
+    setTrainImages((prev) => [...prev, ...next])
   }
   function removeTrainImage(id: string) {
-    setTrainImages(prev => {
-      const it = prev.find(x => x.id === id)
+    setTrainImages((prev) => {
+      const it = prev.find((x) => x.id === id)
       if (it) URL.revokeObjectURL(it.url)
-      return prev.filter(x => x.id !== id)
+      return prev.filter((x) => x.id !== id)
     })
   }
   function clearTrainImages() {
-    setTrainImages(prev => {
-      prev.forEach(x => URL.revokeObjectURL(x.url))
+    setTrainImages((prev) => {
+      prev.forEach((x) => URL.revokeObjectURL(x.url))
       return []
     })
   }
@@ -214,6 +230,19 @@ export default function AddLoRa({
     if (!name.trim()) {
       toast.error('Please enter a name for this LoRA.')
       return
+    }
+
+    // Optional strength validation (only if user typed something)
+    if (recommendedStrengthText.trim()) {
+      const n = Number(recommendedStrengthText.trim())
+      if (!Number.isFinite(n)) {
+        toast.error('Recommended strength must be a number between 0 and 1.')
+        return
+      }
+      if (n < 0 || n > 1) {
+        toast.error('Recommended strength must be between 0 and 1.')
+        return
+      }
     }
 
     if (tab === 'upload') {
@@ -242,8 +271,10 @@ export default function AddLoRa({
           type: 'image',
           file,
           tags: parsedTags,
-          previews: previewImages.map(p => p.file),
-        })        
+          previews: previewImages.map((p) => p.file),
+          trigger: trigger.trim() || undefined,
+          recommendedStrength,
+        })
       } else {
         if (trainImages.length === 0) return
         await onSubmit({
@@ -253,13 +284,14 @@ export default function AddLoRa({
           trigger: trigger.trim() || undefined,
           repeatPerImage: Math.max(1, repeatPerImage),
           maxEpochs: Math.max(1, maxEpochs),
-          images: trainImages.map(i => ({
+          images: trainImages.map((i) => ({
             file: i.file,
             caption: i.caption.trim() || undefined,
           })),
           estimatedSteps,
           tags: parsedTags,
-        })        
+          recommendedStrength,
+        })
       }
     } finally {
       setSubmitting(false)
@@ -277,7 +309,7 @@ export default function AddLoRa({
     setStartingEngine(true)
     try {
       const { data } = await axios.post(
-        `${normalizeBase(API_BASE_URL)}${START_ENGINE_ROUTE(branch)}`
+        `${normalizeBase(API_BASE_URL)}${START_ENGINE_ROUTE(branch)}`,
       )
       toast.dismiss(t)
       const statusVal = data?.status
@@ -297,9 +329,7 @@ export default function AddLoRa({
         err?.response?.data?.error ||
         err?.response?.data?.detail ||
         err?.response?.data?.message ||
-        (typeof getAxiosErrorMessage === 'function'
-          ? getAxiosErrorMessage(err)
-          : '') ||
+        (typeof getAxiosErrorMessage === 'function' ? getAxiosErrorMessage(err) : '') ||
         err?.message ||
         'Failed to start Image Engine.'
       toast.error(msg)
@@ -312,18 +342,13 @@ export default function AddLoRa({
     <div className={styles.modalBackdrop} onClick={onClose}>
       <div
         className={styles.modal}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
         <div className={styles.modalHeader}>
           <h3 className={styles.modalTitle}>Add a new LoRA</h3>
-          <button
-            className={styles.iconBtn}
-            onClick={onClose}
-            aria-label="Close"
-            type="button"
-          >
+          <button className={styles.iconBtn} onClick={onClose} aria-label="Close" type="button">
             <X size={18} />
           </button>
         </div>
@@ -332,18 +357,14 @@ export default function AddLoRa({
           {/* Tabs */}
           <div className={styles.tabSwitcher}>
             <button
-              className={`${styles.tabBtn} ${
-                tab === 'upload' ? styles.tabBtnActive : ''
-              }`}
+              className={`${styles.tabBtn} ${tab === 'upload' ? styles.tabBtnActive : ''}`}
               onClick={() => setTab('upload')}
               type="button"
             >
               <Upload size={16} /> Upload
             </button>
             <button
-              className={`${styles.tabBtn} ${
-                tab === 'train' ? styles.tabBtnActive : ''
-              }`}
+              className={`${styles.tabBtn} ${tab === 'train' ? styles.tabBtnActive : ''}`}
               onClick={() => setTab('train')}
               type="button"
             >
@@ -356,9 +377,35 @@ export default function AddLoRa({
           <input
             className={styles.input}
             value={name}
-            onChange={e => setName(e.target.value)}
+            onChange={(e) => setName(e.target.value)}
             placeholder="e.g., Realistic Portrait v3"
           />
+
+          {/* NEW: optional metadata (both tabs) */}
+          <div className={styles.twoCol}>
+            <div className={styles.field}>
+              <label className={styles.label}>Recommended strength (optional)</label>
+              <input
+                className={styles.input}
+                inputMode="decimal"
+                placeholder="1"
+                value={recommendedStrengthText}
+                onChange={(e) => setRecommendedStrengthText(e.target.value)}
+              />
+              <div className={styles.muted}>Leave empty to skip.</div>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label}>Trigger word / sentence (optional)</label>
+              <input
+                className={styles.input}
+                placeholder="e.g., restcom-style"
+                value={trigger}
+                onChange={(e) => setTrigger(e.target.value)}
+              />
+              <div className={styles.muted}>Used in prompts to invoke the LoRA.</div>
+            </div>
+          </div>
 
           {/* Tags */}
           <label className={styles.label}>Tags</label>
@@ -367,8 +414,8 @@ export default function AddLoRa({
               className={`${styles.input} ${styles.tagInput}`}
               placeholder="portrait, anime, indoor…"
               value={tagInput}
-              onChange={e => setTagInput(e.target.value)}
-              onKeyDown={e => {
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
                 if (e.key === 'Enter') e.preventDefault()
               }}
             />
@@ -376,12 +423,8 @@ export default function AddLoRa({
 
           {parsedTags.length > 0 && (
             <div className={styles.tagsRow}>
-              {parsedTags.map(t => (
-                <span
-                  key={t}
-                  className={styles.tagChip}
-                  onClick={() => removeTag(t)}
-                >
+              {parsedTags.map((t) => (
+                <span key={t} className={styles.tagChip} onClick={() => removeTag(t)}>
                   #{t}
                 </span>
               ))}
@@ -394,7 +437,7 @@ export default function AddLoRa({
               {/* Model file */}
               <label
                 className={styles.uploadBox}
-                onDragOver={e => {
+                onDragOver={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
                 }}
@@ -404,7 +447,7 @@ export default function AddLoRa({
                   type="file"
                   accept=".safetensors,.pt,.bin"
                   hidden
-                  onChange={e => {
+                  onChange={(e) => {
                     onPickModelFile(e.target.files)
                     e.target.value = ''
                   }}
@@ -412,9 +455,7 @@ export default function AddLoRa({
                 <div className={styles.uploadInner}>
                   <Upload size={20} />
                   <p>Click to upload or drag & drop</p>
-                  <p className={styles.subText}>
-                    Model file (.safetensors, .pt, .bin)
-                  </p>
+                  <p className={styles.subText}>Model file (.safetensors, .pt, .bin)</p>
                 </div>
               </label>
 
@@ -422,22 +463,12 @@ export default function AddLoRa({
                 <ul className={styles.fileCardList}>
                   <li className={styles.fileCard}>
                     <div className={styles.fileInfo}>
-                      <div
-                        className={styles.fileName}
-                        title={file.name}
-                      >
+                      <div className={styles.fileName} title={file.name}>
                         {file.name}
                       </div>
-                      <div className={styles.fileMeta}>
-                        {fmtSize(file.size)}
-                      </div>
+                      <div className={styles.fileMeta}>{fmtSize(file.size)}</div>
                     </div>
-                    <button
-                      className={styles.iconBtn}
-                      onClick={clearModelFile}
-                      aria-label="Remove file"
-                      type="button"
-                    >
+                    <button className={styles.iconBtn} onClick={clearModelFile} aria-label="Remove file" type="button">
                       <Trash2 size={16} />
                     </button>
                   </li>
@@ -449,7 +480,7 @@ export default function AddLoRa({
                 <label className={styles.label}>Preview images (optional)</label>
                 <label
                   className={styles.previewDropZone}
-                  onDragOver={e => {
+                  onDragOver={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
                   }}
@@ -460,7 +491,7 @@ export default function AddLoRa({
                     accept="image/*"
                     multiple
                     hidden
-                    onChange={e => {
+                    onChange={(e) => {
                       onPickPreviewFiles(e.target.files)
                       e.target.value = ''
                     }}
@@ -487,23 +518,14 @@ export default function AddLoRa({
                     </div>
 
                     <div className={styles.trainList}>
-                      {previewImages.map(img => (
+                      {previewImages.map((img) => (
                         <div key={img.id} className={styles.trainItem}>
-                          <img
-                            className={styles.trainThumb}
-                            src={img.url}
-                            alt="preview"
-                          />
+                          <img className={styles.trainThumb} src={img.url} alt="preview" />
                           <div className={styles.trainMetaRow}>
-                            <span
-                              className={styles.trainFilename}
-                              title={img.file.name}
-                            >
+                            <span className={styles.trainFilename} title={img.file.name}>
                               {img.file.name}
                             </span>
-                            <span className={styles.trainFilesize}>
-                              {fmtSize(img.file.size)}
-                            </span>
+                            <span className={styles.trainFilesize}>{fmtSize(img.file.size)}</span>
                           </div>
                           <button
                             className={styles.iconBtn}
@@ -525,35 +547,16 @@ export default function AddLoRa({
           {/* ---------- Train tab (images) ---------- */}
           {tab === 'train' && (
             <div className={styles.trainGrid}>
-              <div className={styles.field}>
-                <label className={styles.label}>
-                  Trigger word / sentence
-                </label>
-                <input
-                  className={styles.input}
-                  placeholder="e.g., 'restcom-style' or 'a portrait of @alex'"
-                  value={trigger}
-                  onChange={e => setTrigger(e.target.value)}
-                />
-                <div className={styles.muted}>
-                  Used in prompts to invoke the style or subject.
-                </div>
-              </div>
-
               <div className={styles.twoCol}>
                 <div className={styles.field}>
-                  <label className={styles.label}>
-                    Repeat trains per image
-                  </label>
+                  <label className={styles.label}>Repeat trains per image</label>
                   <input
                     className={styles.input}
                     type="number"
                     min={1}
                     step={1}
                     value={repeatPerImage}
-                    onChange={e =>
-                      setRepeatPerImage(Number(e.target.value || 1))
-                    }
+                    onChange={(e) => setRepeatPerImage(Number(e.target.value || 1))}
                   />
                 </div>
                 <div className={styles.field}>
@@ -564,9 +567,7 @@ export default function AddLoRa({
                     min={1}
                     step={1}
                     value={maxEpochs}
-                    onChange={e =>
-                      setMaxEpochs(Number(e.target.value || 1))
-                    }
+                    onChange={(e) => setMaxEpochs(Number(e.target.value || 1))}
                   />
                 </div>
               </div>
@@ -574,7 +575,7 @@ export default function AddLoRa({
               {/* Clickable + DnD */}
               <label
                 className={styles.dropZone}
-                onDragOver={e => {
+                onDragOver={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
                 }}
@@ -585,7 +586,7 @@ export default function AddLoRa({
                   accept="image/*"
                   multiple
                   hidden
-                  onChange={e => {
+                  onChange={(e) => {
                     onPickTrainFiles(e.target.files)
                     e.target.value = ''
                   }}
@@ -593,9 +594,7 @@ export default function AddLoRa({
                 <div className={styles.dropInner}>
                   <Upload size={18} />
                   <div>Click to upload or drag & drop</div>
-                  <div className={styles.subText}>
-                    Images (JPG, PNG, WEBP)
-                  </div>
+                  <div className={styles.subText}>Images (JPG, PNG, WEBP)</div>
                 </div>
               </label>
 
@@ -604,70 +603,41 @@ export default function AddLoRa({
                 <>
                   <div className={styles.trainHeader}>
                     <span>{trainImages.length} image(s) selected</span>
-                    <button
-                      className={styles.iconBtn}
-                      onClick={clearTrainImages}
-                      type="button"
-                      aria-label="Clear all"
-                    >
+                    <button className={styles.iconBtn} onClick={clearTrainImages} type="button" aria-label="Clear all">
                       <Trash2 size={16} />
                     </button>
                   </div>
 
                   <div className={styles.trainList}>
-                    {trainImages.map(img => (
+                    {trainImages.map((img) => (
                       <div key={img.id} className={styles.trainItem}>
-                        <img
-                          className={styles.trainThumb}
-                          src={img.url}
-                          alt="train"
-                        />
+                        <img className={styles.trainThumb} src={img.url} alt="train" />
                         <div className={styles.trainMetaRow}>
-                          <span
-                            className={styles.trainFilename}
-                            title={img.file.name}
-                          >
+                          <span className={styles.trainFilename} title={img.file.name}>
                             {img.file.name}
                           </span>
-                          <span className={styles.trainFilesize}>
-                            {fmtSize(img.file.size)}
-                          </span>
+                          <span className={styles.trainFilesize}>{fmtSize(img.file.size)}</span>
                         </div>
                         <input
                           className={styles.trainCaption}
                           placeholder="Optional caption…"
                           value={img.caption}
-                          onChange={e =>
-                            setTrainImages(prev =>
-                              prev.map(it =>
-                                it.id === img.id
-                                  ? { ...it, caption: e.target.value }
-                                  : it
-                              )
+                          onChange={(e) =>
+                            setTrainImages((prev) =>
+                              prev.map((it) => (it.id === img.id ? { ...it, caption: e.target.value } : it)),
                             )
                           }
                         />
-                        <button
-                          className={styles.iconBtn}
-                          onClick={() => removeTrainImage(img.id)}
-                          aria-label="Remove image"
-                          type="button"
-                        >
+                        <button className={styles.iconBtn} onClick={() => removeTrainImage(img.id)} aria-label="Remove image" type="button">
                           <X size={16} />
                         </button>
                       </div>
                     ))}
                   </div>
 
-                  <div
-                    className={styles.estimateRow}
-                    role="status"
-                    aria-live="polite"
-                  >
+                  <div className={styles.estimateRow} role="status" aria-live="polite">
                     <span className={styles.muted}>Estimated steps</span>
-                    <span className={styles.stepsValue}>
-                      {estimatedSteps.toLocaleString()}
-                    </span>
+                    <span className={styles.stepsValue}>{estimatedSteps.toLocaleString()}</span>
                   </div>
                 </>
               )}
@@ -676,36 +646,16 @@ export default function AddLoRa({
         </div>
 
         <div className={styles.modalFooter}>
-          <button
-            className={styles.secondaryBtn}
-            onClick={onClose}
-            type="button"
-          >
+          <button className={styles.secondaryBtn} onClick={onClose} type="button">
             Close
           </button>
 
           {engineOnline ? (
-            <button
-              className={styles.primaryBtn}
-              onClick={submit}
-              disabled={submitting}
-              type="button"
-            >
-              {tab === 'upload'
-                ? submitting
-                  ? 'Adding…'
-                  : 'Add LoRA'
-                : submitting
-                  ? 'Starting…'
-                  : 'Start Training'}
+            <button className={styles.primaryBtn} onClick={submit} disabled={submitting} type="button">
+              {tab === 'upload' ? (submitting ? 'Adding…' : 'Add LoRA') : submitting ? 'Starting…' : 'Start Training'}
             </button>
           ) : (
-            <button
-              className={styles.primaryBtn}
-              onClick={handleStartEngine}
-              disabled={startingEngine}
-              type="button"
-            >
+            <button className={styles.primaryBtn} onClick={handleStartEngine} disabled={startingEngine} type="button">
               {startingEngine ? 'Starting Engine…' : 'Start Image Engine'}
             </button>
           )}

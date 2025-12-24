@@ -354,6 +354,19 @@
   cursor: not-allowed;
 }
 
+.primaryBtn {
+  background: #0073ff;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.35rem 0.7rem;
+  font-weight: 400;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: .9rem;
+}
 
 /* ===================== Empty ===================== */
 .empty {
@@ -428,8 +441,12 @@
   display: flex;
   align-items: center;
   gap: .5rem;
+  min-inline-size: 0;     /* key: allow children to shrink inside flex row */
 }
+
 .cardTitle {
+  flex: 1 1 auto;         /* key: title takes remaining space */
+  min-inline-size: 0;     /* key: allow ellipsis to actually work */
   margin: 0;
   color: #fff;
   font-weight: 600;
@@ -438,10 +455,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .menu {
+  flex: 0 0 auto;         /* key: never shrink */
   display: inline-flex;
   gap: .3rem;
+  align-items: center;
 }
+
+/* ensure the select button never gets squashed */
+.menu .iconBtn {
+  flex: 0 0 34px;
+}
+
 .tagsRow {
   display: flex;
   gap: .35rem;
@@ -770,3 +796,30 @@
   outline: 2px solid #0b61ff;
   border-color: #0b61ff;
 }
+
+.triggerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .5rem .75rem;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  margin-bottom: .75rem;
+  background: rgba(255,255,255,0.03);
+}
+
+.triggerLabel {
+  font-size: .8rem;
+  opacity: .7;
+}
+
+.triggerValue {
+  font-size: .85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70%;
+}
+

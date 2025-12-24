@@ -232,6 +232,18 @@ const Image = () => {
     return normalizeBase(raw)
   }
 
+  const attachLorasToForm = (form: FormData) => {
+    if (!activeLoras.length) return
+  
+    activeLoras.forEach(({ id, strength }) => {
+      form.append('lora_ids', id)
+      form.append('lora_scales', strength.toString())
+    })
+  
+    // optional debug
+    console.debug('[image] sending LoRAs', activeLoras)
+  }
+
   // Poll a single task (survives tab switches because it lives here)
   const pollSingle = useCallback(
     async (b: Branch, taskId: string) => {
@@ -385,6 +397,7 @@ const Image = () => {
       if (Number.isFinite(seed as number)) form.append('seed', String(seed))
       form.append('out_format', format)
       form.append('num_images', String(batch))
+      attachLorasToForm(form)
 
       setIsGeneratingByBranch(prev => ({ ...prev, [b]: true }))
 
@@ -473,7 +486,7 @@ const Image = () => {
         toast.error(e?.message || 'Failed to queue generation')
       }
     },
-    [onlineByBranch, pollSingle]
+    [onlineByBranch, pollSingle, activeLoras]
   )
 
   /* ───────── Image-to-Image queue (kontext, with image file) ───────── */
@@ -522,6 +535,7 @@ const Image = () => {
       form.append('out_format', format)
       form.append('num_images', String(batch))
       form.append('image', imageFile, imageFile.name)
+      attachLorasToForm(form)
 
       setIsGeneratingByBranch(prev => ({ ...prev, [b]: true }))
 
@@ -601,7 +615,7 @@ const Image = () => {
         toast.error(e?.message || 'Failed to queue Img-to-Img')
       }
     },
-    [onlineByBranch, pollSingle]
+    [onlineByBranch, pollSingle, activeLoras]
   )
 
   /* ───────── Inpaint queue (fill, with image + mask) ───────── */
@@ -651,6 +665,7 @@ const Image = () => {
       form.append('num_images', String(batch))
       form.append('image', imageFile, imageFile.name)
       form.append('mask', new File([mask], 'mask.png', { type: 'image/png' }))
+      attachLorasToForm(form)
 
       setIsGeneratingByBranch(prev => ({ ...prev, [b]: true }))
 
@@ -734,7 +749,7 @@ const Image = () => {
         toast.error(e?.message || 'Failed to queue Inpaint')
       }
     },
-    [onlineByBranch, pollSingle]
+    [onlineByBranch, pollSingle, activeLoras]
   )
 
   /* ───────── Cancel for a branch (all tasks) ───────── */
@@ -976,7 +991,8 @@ const Image = () => {
               onClick={() => setActiveRightTab('loraLibrary')}
               type="button"
             >
-              LoRA Library{selectedLoraCount > 0 ? ` (${selectedLoraCount}/${MAX_SELECTED})` : ''}
+              LoRA Library
+              {selectedLoraCount > 0 ? ` (${selectedLoraCount}/${MAX_SELECTED})` : ''}
             </button>
             <div
               className={styles.tabIndicator}
@@ -984,11 +1000,28 @@ const Image = () => {
             />
           </div>
 
-          {activeRightTab === 'settings' ? (
-            <GeneralSettings value={settings} onChange={setSettings} />
-          ) : (
-            <LoraLibrary onSelectedChange={setActiveLoras} />
-          )}
+          {/* Keep both mounted, just hide inactive one */}
+          <div className={styles.rightTabBody}>
+            <div
+              className={
+                activeRightTab === 'settings'
+                  ? styles.tabPanelActive
+                  : styles.tabPanelHidden
+              }
+            >
+              <GeneralSettings value={settings} onChange={setSettings} />
+            </div>
+
+            <div
+              className={
+                activeRightTab === 'loraLibrary'
+                  ? styles.tabPanelActive
+                  : styles.tabPanelHidden
+              }
+            >
+              <LoraLibrary onSelectedChange={setActiveLoras} />
+            </div>
+          </div>
         </div>
       </div>
     </div>

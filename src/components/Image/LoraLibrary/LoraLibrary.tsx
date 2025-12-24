@@ -27,11 +27,13 @@ export type Lora = {
   isFavorite?: boolean
   /** flag to distinguish user's LoRAs from defaults */
   isMine?: boolean
+  trigger?: string
+  recommendedStrength?: number | null
 }
 
 /** Component API — can be controlled externally, but self-wires to backend if not provided */
 export type LoraLibraryProps = {
-  items?: Lora[] // if provided, component becomes "dumb view" over this list
+  items?: Lora[]
   isLoading?: boolean
   onRefresh?: () => Promise<void> | void
   onToggleFavorite?: (id: string, next: boolean) => Promise<void> | void
@@ -46,9 +48,10 @@ function cn(...xs: Array<string | false | undefined>) {
 }
 
 function formatSizeMB(n?: number) {
-  if (n === undefined || n === null) return '—'
-  if (n < 1024) return `${n} MB`
-  return `${(n / 1024).toFixed(2)} GB`
+  if (n === undefined || n === null || Number.isNaN(n)) return '—'
+  if (n >= 1024) return `${(n / 1024).toFixed(2)} GB`
+  if (n >= 10) return `${Math.round(n)} MB`
+  return `${n.toFixed(1)} MB`
 }
 
 function timeAgo(iso?: string) {
@@ -78,6 +81,37 @@ function getEngineBaseForBranch(branch: Branch): string | null {
   const raw = IMAGE_ENGINE_BASE_BY_BRANCH[branch]
   if (!raw) return null
   return raw.replace(/\/+$/, '')
+}
+
+function getErrorDetail(err: any): string | null {
+  const d = err?.response?.data
+  if (!d) return null
+  if (typeof d === 'string') return d
+  if (typeof d?.detail === 'string') return d.detail
+  if (typeof d?.error === 'string') return d.error
+  return null
+}
+
+function extractFilenameFromContentDisposition(cd?: string | null): string | null {
+  if (!cd) return null
+  const m = /filename\*?=(?:UTF-8'')?("?)([^";]+)\1/i.exec(cd)
+  if (!m) return null
+  try {
+    return decodeURIComponent(m[2])
+  } catch {
+    return m[2]
+  }
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
 }
 
 export default function LoraLibrary({
@@ -116,16 +150,13 @@ export default function LoraLibrary({
   // gallery state (drawer only)
   const [galleryIndex, setGalleryIndex] = useState(0)
 
-  // engine status per-branch (standalone page)
-  const [engineOnlineByBranch, setEngineOnlineByBranch] = useState<
-    Record<Branch, boolean>
-  >({
+  // engine status per-branch
+  const [engineOnlineByBranch, setEngineOnlineByBranch] = useState<Record<Branch, boolean>>({
     krea: false,
     kontext: false,
     fill: false,
   })
 
-  // derived: ANY engine online
   const anyEngineOnline = Object.values(engineOnlineByBranch).some(Boolean)
 
   const allTags = useMemo(() => {
@@ -171,12 +202,12 @@ export default function LoraLibrary({
 
   function startImageEngineKeepAlive() {
     if (!API_BASE_URL) return undefined
-  
+
     const base = API_BASE_URL.replace(/\/+$/, '')
     let cancelled = false
     let timer: number | undefined
     let activeBranch: Branch | null = null
-  
+
     async function detectOnlineBranch(): Promise<Branch | null> {
       for (const branch of BRANCHES) {
         try {
@@ -186,77 +217,56 @@ export default function LoraLibrary({
           })
           if (!res.ok) continue
           const data = await res.json()
-          if (data?.online) {
-            // console.debug('Engine online on branch', branch)
-            return branch
-          }
+          if (data?.online) return branch
         } catch {
-          // ignore; just means this branch isn't reachable
+          // ignore
         }
       }
       return null
     }
-  
+
     const tick = async () => {
       if (cancelled) return
-  
       try {
-        // If we don't yet have an active branch, try to find one
         if (!activeBranch) {
           activeBranch = await detectOnlineBranch()
           if (!activeBranch) {
-            // No engine online yet → try again soon
-            if (!cancelled) {
-              timer = window.setTimeout(tick, 15_000) as unknown as number
-            }
+            if (!cancelled) timer = window.setTimeout(tick, 15_000) as unknown as number
             return
           }
         }
-  
-        // Ping the chosen branch to keep it warm.
+
         const engineBase = getEngineBaseForBranch(activeBranch)
         if (!engineBase) {
-          // env not configured for this branch → drop and re-detect later
           activeBranch = null
-          if (!cancelled) {
-            timer = window.setTimeout(tick, 60_000) as unknown as number
-          }
+          if (!cancelled) timer = window.setTimeout(tick, 60_000) as unknown as number
           return
         }
 
-        // Ping the chosen engine directly to keep it warm.
         await fetch(`${engineBase}/image/poll-activity/`, {
+          method: 'POST',
           cache: 'no-store',
           headers: { Accept: 'application/json' },
           keepalive: true,
         })
       } catch {
-        // If it fails, drop the branch so we re-detect on next tick
         activeBranch = null
       } finally {
-        if (!cancelled) {
-          // Pod timeout is 5 minutes; 60s is plenty to keep it alive
-          timer = window.setTimeout(tick, 60_000) as unknown as number
-        }
+        if (!cancelled) timer = window.setTimeout(tick, 60_000) as unknown as number
       }
     }
-  
-    // Kick off immediately
+
     tick()
-  
-    // Return cleanup
+
     return () => {
       cancelled = true
-      if (timer) {
-        window.clearTimeout(timer)
-      }
+      if (timer) window.clearTimeout(timer)
     }
   }
 
   // -------- Backend wiring (defaults) --------
 
   async function fetchLoras() {
-    // If parent controls data, don't auto-fetch
     if (items) return
     try {
       setLoading(true)
@@ -292,7 +302,6 @@ export default function LoraLibrary({
         { withCredentials: true }
       )
       toast.success(next ? 'Added to favourites' : 'Removed from favourites')
-      // Optionally refresh counts from backend
       fetchLoras()
     } catch (err) {
       console.error('Failed to toggle favorite', err)
@@ -318,6 +327,13 @@ export default function LoraLibrary({
   }
 
   async function defaultDelete(ids: string[]) {
+    // ✅ gate like AddLoRa: if all engines offline, don't even try
+    if (!anyEngineOnline) {
+      toast.error('Image engine offline')
+      return
+    }
+
+    const toastId = toast.loading(ids.length === 1 ? 'Deleting LoRA…' : 'Deleting LoRAs…')
     try {
       if (ids.length === 1) {
         await axios.delete(`${API_BASE_URL}/images/loras/${ids[0]}/`, {
@@ -330,150 +346,186 @@ export default function LoraLibrary({
           { withCredentials: true }
         )
       }
+
       setRemoteItems(prev => prev.filter(l => !ids.includes(l.id)))
+      toast.dismiss(toastId)
       toast.success(ids.length === 1 ? 'LoRA deleted' : 'LoRAs deleted')
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete LoRAs', err)
-      toast.error('Failed to delete LoRA(s)')
+      toast.dismiss(toastId)
+
+      const status = err?.response?.status
+      const detail = getErrorDetail(err)
+
+      if (status === 503) toast.error(detail || 'All image engines offline. Try again.')
+      else if (status === 502) toast.error(detail || 'Engine refused delete. Check engine logs.')
+      else toast.error(detail || 'Failed to delete LoRA(s)')
     }
   }
 
   async function defaultDownload(id: string) {
+    // ✅ gate like AddLoRa: if all engines offline, don't even try
+    if (!anyEngineOnline) {
+      toast.error('Image engine offline')
+      return
+    }
+
+    const toastId = toast.loading('Preparing download…')
     try {
+      // ✅ backend streams file on POST /download/
       const res = await axios.post(
         `${API_BASE_URL}/images/loras/${id}/download/`,
         {},
-        { withCredentials: true }
+        {
+          withCredentials: true,
+          responseType: 'blob',
+          // important: allow axios to accept 200 only
+          validateStatus: s => (s >= 200 && s < 300) || s === 502 || s === 503,
+        }
       )
-      const url = (res.data && (res.data as any).url) as string | undefined
-      if (url) {
-        window.open(url, '_blank')
-        toast.success('Download started')
-      } else {
-        console.warn('Download URL not provided by backend yet')
-        toast.error('Download URL not provided')
+
+      if (res.status === 503) {
+        toast.dismiss(toastId)
+        toast.error('All image engines offline. Try again.')
+        return
       }
-    } catch (err) {
+
+      if (res.status === 502) {
+        toast.dismiss(toastId)
+        toast.error('Engine refused download. Check engine logs.')
+        return
+      }
+
+      const cd = res.headers?.['content-disposition'] as string | undefined
+      const filename = extractFilenameFromContentDisposition(cd) || `lora-${id}.safetensors`
+
+      const blob = res.data as Blob
+      downloadBlob(blob, filename)
+
+      toast.dismiss(toastId)
+      toast.success('Download started')
+    } catch (err: any) {
       console.error('Failed to download LoRA', err)
-      toast.error('Failed to start download')
+      toast.dismiss(toastId)
+
+      const status = err?.response?.status
+      const detail = getErrorDetail(err)
+
+      if (status === 503) toast.error(detail || 'All image engines offline. Try again.')
+      else if (status === 502) toast.error(detail || 'Engine refused download. Check engine logs.')
+      else toast.error(detail || 'Failed to download')
     }
   }
 
-// --- Wire AddLoRa modal to backend upload/train views WITH TOASTS ---
-async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean> {
-  if (!API_BASE_URL) {
-    console.error('API base URL not set')
-    toast.error('API base URL not set')
-    return false
-  }
-
-  const base = API_BASE_URL.replace(/\/+$/, '')
-
-  const loadingMsg =
-    payload.mode === 'upload'
-      ? 'Uploading LoRA…'
-      : 'Creating LoRA and starting training…'
-
-  const successMsg =
-    payload.mode === 'upload'
-      ? 'LoRA uploaded successfully'
-      : 'Training started for LoRA'
-
-  const toastId = toast.loading(loadingMsg)
-
-  // 🔥 start image engine keep-alive while we’re working
-  const stopKeepAlive = startImageEngineKeepAlive()
-
-  try {
-    if (payload.mode === 'upload') {
-      // --- /images/loras/upload/ ---
-      const form = new FormData()
-      form.append('name', payload.name)
-      form.append('type', payload.type)
-
-      payload.tags.forEach(tg => form.append('tags', tg))
-      form.append('file', payload.file, payload.file.name)
-
-      payload.previews?.forEach(p => {
-        form.append('previews', p, p.name)
-      })
-
-      const res = await axios.post<Lora>(
-        `${base}/images/loras/upload/`,
-        form,
-        {
-          withCredentials: true,
-          headers: { 'Content-Type': 'multipart/form-data' },
-        }
-      )
-
-      const created = res.data
-      setRemoteItems(prev => [created, ...prev])
-    } else {
-      // --- Train mode ---
-      const createRes = await axios.post<Lora>(
-        `${base}/images/loras/`,
-        {
-          name: payload.name,
-          type: payload.type,
-          tags: payload.tags,
-        },
-        { withCredentials: true }
-      )
-
-      const created = createRes.data
-
-      const trainForm = new FormData()
-      if (payload.trigger) trainForm.append('trigger', payload.trigger)
-      trainForm.append('repeat_per_image', String(payload.repeatPerImage))
-      trainForm.append('max_epochs', String(payload.maxEpochs))
-      trainForm.append('estimated_steps', String(payload.estimatedSteps))
-
-      payload.images.forEach((img, idx) => {
-        trainForm.append('images', img.file, img.file.name)
-        if (img.caption) {
-          trainForm.append(`captions[${idx}]`, img.caption)
-        }
-      })
-
-      await axios.post(
-        `${base}/images/loras/${created.id}/train/`,
-        trainForm,
-        {
-          withCredentials: true,
-          headers: { 'Content-Type': 'multipart/form-data' },
-        }
-      )
-
-      setRemoteItems(prev => [created, ...prev])
+  // --- Wire AddLoRa modal upload/train views WITH TOASTS ---
+  async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean> {
+    if (!API_BASE_URL) {
+      toast.error('API base URL not set')
+      return false
     }
 
-    toast.dismiss(toastId)
-    toast.success(successMsg)
-    return true
-  } catch (err: any) {
-    console.error('Failed to add/train LoRA', err)
-    toast.dismiss(toastId)
-    const fallback =
+    const base = API_BASE_URL.replace(/\/+$/, '')
+
+    const loadingMsg =
       payload.mode === 'upload'
-        ? 'Failed to upload LoRA'
-        : 'Failed to create/train LoRA'
-    const msg =
-      err?.response?.data?.detail ||
-      err?.response?.data?.error ||
-      err?.message ||
-      fallback
-    toast.error(msg)
-    return false
-  } finally {
-    // 🧹 always stop keep-alive
-    if (typeof stopKeepAlive === 'function') {
-      stopKeepAlive()
+        ? 'Uploading LoRA…'
+        : 'Creating LoRA and starting training…'
+
+    const successMsg =
+      payload.mode === 'upload'
+        ? 'LoRA uploaded successfully'
+        : 'Training started for LoRA'
+
+    const toastId = toast.loading(loadingMsg)
+    const stopKeepAlive = startImageEngineKeepAlive()
+
+    try {
+      if (payload.mode === 'upload') {
+        const form = new FormData()
+        form.append('name', payload.name)
+        form.append('type', payload.type)
+        payload.tags.forEach(tg => form.append('tags', tg))
+        form.append('file', payload.file, payload.file.name)
+        payload.previews?.forEach(p => form.append('previews', p, p.name))
+
+        if ((payload as any).trigger) form.append('trigger', String((payload as any).trigger))
+        const rs = (payload as any).recommendedStrength
+        if (rs !== undefined && rs !== null && String(rs).trim() !== '') {
+          form.append('recommendedStrength', String(rs))
+        }
+
+        const res = await axios.post<Lora>(
+          `${base}/images/loras/upload/`,
+          form,
+          {
+            withCredentials: true,
+            headers: { 'Content-Type': 'multipart/form-data' },
+          }
+        )
+
+        const created = res.data
+        setRemoteItems(prev => [created, ...prev])
+      } else {
+        const createRes = await axios.post<Lora>(
+          `${base}/images/loras/`,
+          {
+            name: payload.name,
+            type: payload.type,
+            tags: payload.tags,
+            trigger: payload.trigger,
+            recommendedStrength: payload.recommendedStrength ?? null,
+          },
+          { withCredentials: true }
+        )
+
+        const created = createRes.data
+
+        const trainForm = new FormData()
+        if (payload.trigger) trainForm.append('trigger', payload.trigger)
+        trainForm.append('repeat_per_image', String(payload.repeatPerImage))
+        trainForm.append('max_epochs', String(payload.maxEpochs))
+        trainForm.append('estimated_steps', String(payload.estimatedSteps))
+
+        payload.images.forEach((img, idx) => {
+          trainForm.append('images', img.file, img.file.name)
+          if (img.caption) trainForm.append(`captions[${idx}]`, img.caption)
+        })
+
+        await axios.post(
+          `${base}/images/loras/${created.id}/train/`,
+          trainForm,
+          {
+            withCredentials: true,
+            headers: { 'Content-Type': 'multipart/form-data' },
+          }
+        )
+
+        setRemoteItems(prev => [created, ...prev])
+      }
+
+      toast.dismiss(toastId)
+      toast.success(successMsg)
+      return true
+    } catch (err: any) {
+      console.error('Failed to add/train LoRA', err)
+      toast.dismiss(toastId)
+      const fallback =
+        payload.mode === 'upload'
+          ? 'Failed to upload LoRA'
+          : 'Failed to create/train LoRA'
+      const msg =
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        err?.message ||
+        fallback
+      toast.error(msg)
+      return false
+    } finally {
+      if (typeof stopKeepAlive === 'function') stopKeepAlive()
     }
   }
-}
 
-  // -------- Engine status polling (standalone, checks ALL branches) --------
+  // -------- Engine status polling (checks ALL branches) --------
   useEffect(() => {
     if (!API_BASE_URL) return
 
@@ -504,16 +556,12 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
         if (!controller.signal.aborted) {
           setEngineOnlineByBranch(prev => {
             const next = { ...prev }
-            for (const r of results) {
-              next[r.branch] = r.online
-            }
+            for (const r of results) next[r.branch] = r.online
             return next
           })
         }
       } finally {
-        if (!cancelled) {
-          tick = window.setTimeout(poll, 2500) as unknown as number
-        }
+        if (!cancelled) tick = window.setTimeout(poll, 2500) as unknown as number
       }
     }
 
@@ -537,7 +585,7 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
   }
 
   function handleRefreshAndClear() {
-    setActiveTags([]) // clear tag filters
+    setActiveTags([])
     if (onRefresh) {
       onRefresh()
       toast.success('LoRAs refreshed')
@@ -557,17 +605,13 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
     }, 350)
   }
 
-  // optimistic toggle
   async function handleFavorite(l: Lora) {
     const next = !effectiveFav(l)
     pulseFav(l.id)
     setFavOverrides(prev => ({ ...prev, [l.id]: next }))
 
-    if (onToggleFavorite) {
-      await onToggleFavorite(l.id, next)
-    } else {
-      await defaultToggleFavorite(l.id, next)
-    }
+    if (onToggleFavorite) await onToggleFavorite(l.id, next)
+    else await defaultToggleFavorite(l.id, next)
   }
 
   function clearSelection() {
@@ -576,12 +620,17 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
 
   function openDetails(l: Lora) {
     setDetailsItem(l)
-    setGalleryIndex(0) // reset gallery to first image
+    setGalleryIndex(0)
     setDetailsOpen(true)
     onOpenDetails?.(l)
   }
 
   async function handleDelete(ids: string[]) {
+    if (!anyEngineOnline) {
+      toast.error('Image engine offline')
+      return
+    }
+
     if (onDelete) {
       await onDelete(ids)
       toast.success(ids.length === 1 ? 'LoRA deleted' : 'LoRAs deleted')
@@ -591,19 +640,27 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
     clearSelection()
   }
 
-  // Use up to MAX_USE selected loras → /image
+  async function handleDownload(id: string) {
+    if (!anyEngineOnline) {
+      toast.error('Image engine offline')
+      return
+    }
+
+    if (onDownload) await onDownload(id)
+    else await defaultDownload(id)
+  }
+
   function handleUseSelected() {
     const ids = Array.from(selected).slice(0, MAX_USE)
     try {
       sessionStorage.setItem('image.selectedLoras', JSON.stringify(ids))
       toast.success('LoRAs applied to Image page')
     } catch {
-      // ignore; not critical
+      // ignore
     }
     window.location.href = '/image'
   }
 
-  // Keyboard navigation in drawer
   useEffect(() => {
     if (!detailsOpen || !detailsItem) return
     const gallery = [
@@ -619,49 +676,35 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
     return () => window.removeEventListener('keydown', onKey)
   }, [detailsOpen, detailsItem])
 
-  // helper to gather gallery URLs
   const galleryFor = (l: Lora) => {
     const all = [
       ...(l.previewUrl ? [l.previewUrl] : []),
       ...(l.sampleUrls || []),
     ]
-  
     const seen = new Set<string>()
     return all.filter(url => {
       if (!url || seen.has(url)) return false
       seen.add(url)
       return true
     })
-  }  
+  }
 
   return (
     <div className={styles.page}>
-      {/* Status pill OUTSIDE the main panel, but inside the page */}
-      <div
-        className={`${styles.engineStatusInline} ${
-          anyEngineOnline ? styles.onlineStatus : ''
-        }`}
-      >
-        <span
-          className={`${styles.statusDot} ${
-            anyEngineOnline ? styles.online : styles.offline
-          }`}
-        />
+      <div className={`${styles.engineStatusInline} ${anyEngineOnline ? styles.onlineStatus : ''}`}>
+        <span className={`${styles.statusDot} ${anyEngineOnline ? styles.online : styles.offline}`} />
         <span className={styles.engineStatusText}>
           Image engine {anyEngineOnline ? 'Online' : 'Offline'}
         </span>
       </div>
 
-      {/* Main LoRA Library panel */}
       <div className={styles.wrap} data-view={view}>
-        {/* Header */}
         <div className={styles.headerRow}>
           <div>
             <h2 className={styles.title}>LoRA Library</h2>
             <div className={styles.subtitle}>Browse through our collection of LoRAs.</div>
           </div>
           <div className={styles.headerActions}>
-            {/* Toggle with custom tooltip + centered icon */}
             <div
               className={styles.tooltipWrapper}
               data-tooltip={view === 'grid' ? 'List layout' : 'Grid layout'}
@@ -682,7 +725,6 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
           </div>
         </div>
 
-        {/* Toolbar */}
         <div className={styles.toolbar}>
           <div className={styles.searchBox}>
             <Search className={styles.searchIcon} size={16} />
@@ -695,70 +737,32 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
           </div>
 
           <div className={styles.sortChips}>
-            <button
-              className={cn(styles.chip, sort === 'recent' && styles.chipActive)}
-              onClick={() => setSort('recent')}
-              type="button"
-            >
+            <button className={cn(styles.chip, sort === 'recent' && styles.chipActive)} onClick={() => setSort('recent')} type="button">
               Recent
             </button>
-            <button
-              className={cn(styles.chip, sort === 'popular' && styles.chipActive)}
-              onClick={() => setSort('popular')}
-              type="button"
-            >
+            <button className={cn(styles.chip, sort === 'popular' && styles.chipActive)} onClick={() => setSort('popular')} type="button">
               Popular
             </button>
-            <button
-              className={cn(styles.chip, sort === 'name' && styles.chipActive)}
-              onClick={() => setSort('name')}
-              type="button"
-            >
+            <button className={cn(styles.chip, sort === 'name' && styles.chipActive)} onClick={() => setSort('name')} type="button">
               A–Z
             </button>
 
-            <div
-              className={styles.tooltipWrapper}
-              data-tooltip={onlyFavs ? 'Showing favourites' : 'Show favourites'}
-            >
-              <button
-                className={cn(styles.chip, onlyFavs && styles.chipActive)}
-                onClick={() => setOnlyFavs(v => !v)}
-                aria-pressed={onlyFavs}
-                type="button"
-              >
+            <div className={styles.tooltipWrapper} data-tooltip={onlyFavs ? 'Showing favourites' : 'Show favourites'}>
+              <button className={cn(styles.chip, onlyFavs && styles.chipActive)} onClick={() => setOnlyFavs(v => !v)} aria-pressed={onlyFavs} type="button">
                 <Star size={14} />
                 <span>Favourites</span>
               </button>
             </div>
 
-            {/* Owner filter chips */}
-            <span
-              className={styles.muted}
-              style={{ opacity: .5, padding: '0 .25rem' }}
-              aria-hidden="true"
-            >
-              |
-            </span>
-            <button
-              className={cn(styles.chip, ownerFilter === 'all' && styles.chipActive)}
-              onClick={() => setOwnerFilter('all')}
-              type="button"
-            >
+            <span className={styles.muted} style={{ opacity: .5, padding: '0 .25rem' }} aria-hidden="true">|</span>
+
+            <button className={cn(styles.chip, ownerFilter === 'all' && styles.chipActive)} onClick={() => setOwnerFilter('all')} type="button">
               All
             </button>
-            <button
-              className={cn(styles.chip, ownerFilter === 'mine' && styles.chipActive)}
-              onClick={() => setOwnerFilter('mine')}
-              type="button"
-            >
+            <button className={cn(styles.chip, ownerFilter === 'mine' && styles.chipActive)} onClick={() => setOwnerFilter('mine')} type="button">
               My LoRAs
             </button>
-            <button
-              className={cn(styles.chip, ownerFilter === 'default' && styles.chipActive)}
-              onClick={() => setOwnerFilter('default')}
-              type="button"
-            >
+            <button className={cn(styles.chip, ownerFilter === 'default' && styles.chipActive)} onClick={() => setOwnerFilter('default')} type="button">
               Defaults
             </button>
           </div>
@@ -771,9 +775,7 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
                   key={t}
                   className={cn(styles.tagBtn, active && styles.tagBtnActive)}
                   onClick={() =>
-                    setActiveTags(prev =>
-                      active ? prev.filter(x => x !== t) : [...prev, t]
-                    )
+                    setActiveTags(prev => (active ? prev.filter(x => x !== t) : [...prev, t]))
                   }
                   type="button"
                 >
@@ -786,43 +788,21 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
           <div className={styles.toolbarRight}>
             {selected.size > 0 ? (
               <>
-                {/* Use button (up to 3) */}
-                <button
-                  className={styles.primaryBtn}
-                  onClick={handleUseSelected}
-                  type="button"
-                  title={`Use up to ${MAX_USE} selected`}
-                >
+                <button className={styles.primaryBtn} onClick={handleUseSelected} type="button" title={`Use up to ${MAX_USE} selected`}>
                   Use ({Math.min(selected.size, MAX_USE)}/{MAX_USE})
                 </button>
 
-                <button
-                  className={styles.dangerBtn}
-                  onClick={() => handleDelete(Array.from(selected))}
-                  type="button"
-                >
+                <button className={styles.dangerBtn} onClick={() => handleDelete(Array.from(selected))} type="button">
                   <Trash2 size={16} /> Delete ({selected.size})
                 </button>
-                <button
-                  className={styles.secondaryBtn}
-                  onClick={clearSelection}
-                  type="button"
-                >
+
+                <button className={styles.secondaryBtn} onClick={clearSelection} type="button">
                   Clear
                 </button>
               </>
             ) : (
-              // icon-only, low-attention, with tooltip, clears tags too
-              <div
-                className={styles.tooltipWrapper}
-                data-tooltip="Refresh"
-                aria-label="Refresh and clear all selected tags"
-              >
-                <button
-                  className={`${styles.iconBtn} ${styles.iconBtnGhost}`}
-                  onClick={handleRefreshAndClear}
-                  type="button"
-                >
+              <div className={styles.tooltipWrapper} data-tooltip="Refresh" aria-label="Refresh and clear all selected tags">
+                <button className={`${styles.iconBtn} ${styles.iconBtnGhost}`} onClick={handleRefreshAndClear} type="button">
                   <RefreshCcw size={16} />
                 </button>
               </div>
@@ -830,7 +810,6 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
           </div>
         </div>
 
-        {/* Content */}
         <div className={styles.contentWrap}>
           {effectiveLoading ? (
             <div className={styles.loading}>Loading…</div>
@@ -852,16 +831,9 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
                 const primary = gallery[0]
 
                 return (
-                  <article
-                    key={l.id}
-                    className={cn(styles.card, selected.has(l.id) && styles.cardSelected)}
-                  >
+                  <article key={l.id} className={cn(styles.card, selected.has(l.id) && styles.cardSelected)}>
                     <div className={styles.cardMedia} onClick={() => openDetails(l)}>
-                      {primary ? (
-                        <img src={primary} alt={l.name} />
-                      ) : (
-                        <div className={styles.noPreview}>No preview</div>
-                      )}
+                      {primary ? <img src={primary} alt={l.name} /> : <div className={styles.noPreview}>No preview</div>}
 
                       <button
                         className={cn(
@@ -884,60 +856,29 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
 
                     <div className={styles.cardBody}>
                       <div className={styles.cardTitleRow}>
-                        <h3
-                          className={styles.cardTitle}
-                          title={l.name}
-                          onClick={() => openDetails(l)}
-                        >
-                          {l.name}
-                        </h3>
+                        <h3 className={styles.cardTitle} title={l.name} onClick={() => openDetails(l)}>{l.name}</h3>
+
                         <div className={styles.menu}>
-                          <div
-                            className={styles.tooltipWrapper}
-                            data-tooltip={selected.has(l.id) ? 'Unselect' : 'Select'}
-                          >
-                            <button
-                              className={styles.iconBtn}
-                              onClick={() => toggleSelected(l.id)}
-                              aria-pressed={selected.has(l.id)}
-                              aria-label={selected.has(l.id) ? 'Unselect' : 'Select'}
-                              type="button"
-                            >
+                          <div className={styles.tooltipWrapper} data-tooltip={selected.has(l.id) ? 'Unselect' : 'Select'}>
+                            <button className={styles.iconBtn} onClick={() => toggleSelected(l.id)} aria-pressed={selected.has(l.id)} aria-label={selected.has(l.id) ? 'Unselect' : 'Select'} type="button">
                               ✓
                             </button>
                           </div>
 
                           <div className={styles.tooltipWrapper} data-tooltip="Rename">
-                            <button
-                              className={styles.iconBtn}
-                              onClick={() => promptRename(l, onRename ?? defaultRename)}
-                              aria-label="Rename"
-                              type="button"
-                            >
+                            <button className={styles.iconBtn} onClick={() => promptRename(l, onRename ?? defaultRename)} aria-label="Rename" type="button">
                               <Pencil size={16} />
                             </button>
                           </div>
 
                           <div className={styles.tooltipWrapper} data-tooltip="Download">
-                            <button
-                              className={styles.iconBtn}
-                              onClick={() =>
-                                (onDownload ? onDownload(l.id) : defaultDownload(l.id))
-                              }
-                              aria-label="Download"
-                              type="button"
-                            >
+                            <button className={styles.iconBtn} onClick={() => handleDownload(l.id)} aria-label="Download" type="button">
                               <Download size={16} />
                             </button>
                           </div>
 
                           <div className={styles.tooltipWrapper} data-tooltip="Delete">
-                            <button
-                              className={styles.iconBtnDanger}
-                              onClick={() => handleDelete([l.id])}
-                              aria-label="Delete"
-                              type="button"
-                            >
+                            <button className={styles.iconBtnDanger} onClick={() => handleDelete([l.id])} aria-label="Delete" type="button">
                               <Trash2 size={16} />
                             </button>
                           </div>
@@ -957,9 +898,7 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
 
                       <div className={styles.footerRow}>
                         <span className={styles.muted}>Added {timeAgo(l.createdAt)}</span>
-                        {!!l.downloads && (
-                          <span className={styles.muted}>{l.downloads} downloads</span>
-                        )}
+                        {!!l.downloads && <span className={styles.muted}>{l.downloads} downloads</span>}
                       </div>
                     </div>
                   </article>
@@ -974,17 +913,9 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
                 const primary = gallery[0]
 
                 return (
-                  <article
-                    key={l.id}
-                    className={cn(styles.row, selected.has(l.id) && styles.cardSelected)}
-                    onClick={() => openDetails(l)}
-                  >
+                  <article key={l.id} className={cn(styles.row, selected.has(l.id) && styles.cardSelected)} onClick={() => openDetails(l)}>
                     <div className={styles.rowThumb}>
-                      {primary ? (
-                        <img src={primary} alt={l.name} />
-                      ) : (
-                        <div className={styles.noPreview}>No preview</div>
-                      )}
+                      {primary ? <img src={primary} alt={l.name} /> : <div className={styles.noPreview}>No preview</div>}
                     </div>
 
                     <div className={styles.rowMain}>
@@ -993,78 +924,39 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
                           <h3 className={styles.rowTitle}>{l.name}</h3>
                           <div className={styles.rowSub}>{l.author || 'Unknown'}</div>
                         </div>
-                        <div
-                          className={styles.rowActions}
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <div
-                            className={styles.tooltipWrapper}
-                            data-tooltip={selected.has(l.id) ? 'Unselect' : 'Select'}
-                          >
-                            <button
-                              className={styles.iconBtn}
-                              onClick={() => toggleSelected(l.id)}
-                              aria-pressed={selected.has(l.id)}
-                              aria-label={selected.has(l.id) ? 'Unselect' : 'Select'}
-                              type="button"
-                            >
+
+                        <div className={styles.rowActions} onClick={e => e.stopPropagation()}>
+                          <div className={styles.tooltipWrapper} data-tooltip={selected.has(l.id) ? 'Unselect' : 'Select'}>
+                            <button className={styles.iconBtn} onClick={() => toggleSelected(l.id)} aria-pressed={selected.has(l.id)} aria-label={selected.has(l.id) ? 'Unselect' : 'Select'} type="button">
                               ✓
                             </button>
                           </div>
 
-                          <div
-                            className={styles.tooltipWrapper}
-                            data-tooltip={fav ? 'Unfavorite' : 'Favorite'}
-                          >
+                          <div className={styles.tooltipWrapper} data-tooltip={fav ? 'Unfavorite' : 'Favorite'}>
                             <button
-                              className={cn(
-                                styles.iconBtn,
-                                fav && styles.favActiveBtn,
-                                favPulsing.has(l.id) && styles.favPulseBtn
-                              )}
+                              className={cn(styles.iconBtn, fav && styles.favActiveBtn, favPulsing.has(l.id) && styles.favPulseBtn)}
                               onClick={() => handleFavorite(l)}
                               aria-label={fav ? 'Unfavorite' : 'Favorite'}
                               type="button"
                             >
-                              {fav ? (
-                                <Star size={16} className={cn(styles.favIcon, styles.favIconFilled)} />
-                              ) : (
-                                <StarOff size={16} className={styles.favIcon} />
-                              )}
+                              {fav ? <Star size={16} className={cn(styles.favIcon, styles.favIconFilled)} /> : <StarOff size={16} className={styles.favIcon} />}
                             </button>
                           </div>
 
                           <div className={styles.tooltipWrapper} data-tooltip="Rename">
-                            <button
-                              className={styles.iconBtn}
-                              onClick={() => promptRename(l, onRename ?? defaultRename)}
-                              aria-label="Rename"
-                              type="button"
-                            >
+                            <button className={styles.iconBtn} onClick={() => promptRename(l, onRename ?? defaultRename)} aria-label="Rename" type="button">
                               <Pencil size={16} />
                             </button>
                           </div>
 
                           <div className={styles.tooltipWrapper} data-tooltip="Download">
-                            <button
-                              className={styles.iconBtn}
-                              onClick={() =>
-                                (onDownload ? onDownload(l.id) : defaultDownload(l.id))
-                              }
-                              aria-label="Download"
-                              type="button"
-                            >
+                            <button className={styles.iconBtn} onClick={() => handleDownload(l.id)} aria-label="Download" type="button">
                               <Download size={16} />
                             </button>
                           </div>
 
                           <div className={styles.tooltipWrapper} data-tooltip="Delete">
-                            <button
-                              className={styles.iconBtnDanger}
-                              onClick={() => handleDelete([l.id])}
-                              aria-label="Delete"
-                              type="button"
-                            >
+                            <button className={styles.iconBtnDanger} onClick={() => handleDelete([l.id])} aria-label="Delete" type="button">
                               <Trash2 size={16} />
                             </button>
                           </div>
@@ -1090,29 +982,17 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
           )}
         </div>
 
-        {/* Details Drawer */}
         {detailsOpen && detailsItem && (
           <div className={styles.drawerBackdrop} onClick={() => setDetailsOpen(false)}>
-            <div
-              className={styles.drawer}
-              onClick={e => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-            >
+            <div className={styles.drawer} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
               <div className={styles.drawerHeader}>
                 <h3 className={styles.drawerTitle}>{detailsItem.name}</h3>
-                <button
-                  className={styles.iconBtn}
-                  onClick={() => setDetailsOpen(false)}
-                  aria-label="Close"
-                  type="button"
-                >
+                <button className={styles.iconBtn} onClick={() => setDetailsOpen(false)} aria-label="Close" type="button">
                   <X size={18} />
                 </button>
               </div>
 
               <div className={styles.drawerBody}>
-                {/* --- Carousel media (arrows here only) --- */}
                 <div className={styles.drawerMedia}>
                   {(() => {
                     const gallery = [
@@ -1133,9 +1013,7 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
                             <div className={styles.tooltipWrapper} data-tooltip="Previous">
                               <button
                                 className={`${styles.carouselBtn} ${styles.carouselBtnLeft}`}
-                                onClick={() =>
-                                  setGalleryIndex(i => (i + gallery.length - 1) % gallery.length)
-                                }
+                                onClick={() => setGalleryIndex(i => (i + gallery.length - 1) % gallery.length)}
                                 aria-label="Previous image"
                                 type="button"
                               >
@@ -1166,7 +1044,6 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
                   })()}
                 </div>
 
-                {/* Thumbnails */}
                 {(() => {
                   const gallery = [
                     ...(detailsItem.previewUrl ? [detailsItem.previewUrl] : []),
@@ -1196,6 +1073,19 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
                   <InfoStat label="Downloads" value={String(detailsItem.downloads ?? 0)} />
                   <InfoStat label="Added" value={timeAgo(detailsItem.createdAt)} />
                   <InfoStat label="Author" value={detailsItem.author || '—'} />
+                  <InfoStat
+                    label="Trigger"
+                    value={(detailsItem.trigger?.trim() ? detailsItem.trigger : '—') as string}
+                  />
+                  <InfoStat
+                    label="Strength"
+                    value={
+                      detailsItem.recommendedStrength === null ||
+                      detailsItem.recommendedStrength === undefined
+                        ? '—'
+                        : String(detailsItem.recommendedStrength)
+                    }
+                  />
                 </div>
 
                 <div className={styles.drawerTags}>
@@ -1206,24 +1096,16 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
               </div>
 
               <div className={styles.drawerFooter}>
-                <button
-                  className={styles.secondaryBtn}
-                  onClick={() => promptRename(detailsItem, onRename ?? defaultRename)}
-                  type="button"
-                >
+                <button className={styles.secondaryBtn} onClick={() => promptRename(detailsItem, onRename ?? defaultRename)} type="button">
                   <Pencil size={16} /> Rename
                 </button>
-                <button
-                  className={styles.secondaryBtn}
-                  onClick={() =>
-                    (onDownload ? onDownload(detailsItem.id) : defaultDownload(detailsItem.id))
-                  }
-                  type="button"
-                >
+
+                <button className={styles.secondaryBtn} onClick={() => handleDownload(detailsItem.id)} type="button">
                   <Download size={16} /> Download
                 </button>
+
                 <div className={styles.flexGrow} />
-                {/* Drawer footer delete (icon-only with tooltip) */}
+
                 <div className={styles.tooltipWrapper} data-tooltip="Delete">
                   <button
                     className={styles.iconBtnDanger}
@@ -1239,28 +1121,20 @@ async function handleAddLoRaFromModal(payload: AddLoRaPayload): Promise<boolean>
           </div>
         )}
 
-        {/* Add Modal (external component) */}
         {addOpen && (
-        <AddLoRa
-          onClose={() => setAddOpen(false)}
-          onSubmit={async payload => {
-            const ok = await handleAddLoRaFromModal(payload)
-            if (ok) {
-              setAddOpen(false)   // only close on success
-            }
-            // if !ok: keep modal open, user input is preserved
-          }}
-          branch="krea"
-          engineOnline={engineOnlineByBranch.krea}
-          onEngineOnlineChange={(branch, online) => {
-            setEngineOnlineByBranch(prev => ({
-              ...prev,
-              [branch]: online,
-            }))
-          }}
-        />
-      )}
-
+          <AddLoRa
+            onClose={() => setAddOpen(false)}
+            onSubmit={async payload => {
+              const ok = await handleAddLoRaFromModal(payload)
+              if (ok) setAddOpen(false)
+            }}
+            branch="krea"
+            engineOnline={engineOnlineByBranch.krea}
+            onEngineOnlineChange={(branch, online) => {
+              setEngineOnlineByBranch(prev => ({ ...prev, [branch]: online }))
+            }}
+          />
+        )}
       </div>
     </div>
   )

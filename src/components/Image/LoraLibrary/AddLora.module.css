@@ -150,7 +150,7 @@
     background: #0073ff;
     color: #fff;
     border: none;
-    font-weight: 600;
+    font-weight: 400;
   }
   .primaryBtn:hover { background: #005ed9; }
   .secondaryBtn {
@@ -364,3 +364,16 @@
   width: 18px;
   height: 18px;
 }
+
+/* Nice spacing for the new two-col block in the shared area */
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+@media (max-width: 560px) {
+  .twoCol { grid-template-columns: 1fr; }
+}
+
+.field { display: grid; gap: 0.3rem; }
+.muted { color: #9aa5b1; font-size: 0.8rem; }

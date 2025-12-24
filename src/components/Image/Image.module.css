@@ -351,3 +351,22 @@
 }
 
 
+/* === Right-side tab content (Settings | LoRA Library) === */
+.rightTabBody {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;       /* let inner panels scroll if needed */
+}
+
+/* The panel that is currently active/visible */
+.tabPanelActive {
+  display: block;
+  height: 100%;
+}
+
+/* The panel that is hidden but still mounted (state preserved) */
+.tabPanelHidden {
+  display: none;
+}

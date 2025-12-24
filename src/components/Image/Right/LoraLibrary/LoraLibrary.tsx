@@ -26,6 +26,10 @@ export type Lora = {
   createdAt?: string
   favorites?: number
   isMine?: boolean
+
+  // ✅ NEW
+  trigger?: string
+  recommendedStrength?: number | null
 }
 
 type Props = {
@@ -46,6 +50,16 @@ function timeAgo(iso?: string) {
   if (d < 30) return `${d}d ago`
   const m = Math.floor(d / 30)
   return `${m}mo ago`
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
+}
+
+function defaultStrengthFor(l: Lora): number {
+  const v = l.recommendedStrength
+  if (typeof v !== 'number' || Number.isNaN(v)) return 1.0
+  return clamp(v, 0, 2)
 }
 
 type OwnerFilter = 'all' | 'mine' | 'default'
@@ -81,7 +95,6 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
       setLoading(true)
       setLoadError(null)
       try {
-        // adjust path if needed to match your backend
         const url = `${API_BASE_URL}/images/loras/`
         const res = await axios.get(url, { withCredentials: true })
 
@@ -94,12 +107,14 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
           name: r.name ?? r.title ?? 'Untitled LoRA',
           tags: r.tags ?? r.tag_list ?? r.tagNames ?? [],
           previewUrl:
+            r.previewUrl ??
             r.preview_url ??
             r.preview ??
             r.cover_image ??
             r.previewImage ??
             undefined,
           sampleUrls:
+            r.sampleUrls ??
             r.sample_urls ??
             r.sample_images ??
             r.samples ??
@@ -109,6 +124,13 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
           createdAt: r.created_at ?? r.createdAt ?? undefined,
           favorites: r.favorites ?? r.favs ?? r.likes ?? 0,
           isMine: r.is_mine ?? r.isMine ?? false,
+
+          // ✅ NEW
+          trigger: (r.trigger ?? '').toString() || undefined,
+          recommendedStrength:
+            r.recommendedStrength ??
+            r.recommended_strength ??
+            null,
         })).filter((l) => !!l.id)
 
         if (!cancelled) {
@@ -147,13 +169,15 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
       const incoming = JSON.parse(raw) as string[] | null
       if (!Array.isArray(incoming) || incoming.length === 0) return
 
-      const available = new Set(data.map((d) => d.id))
+      const byId = new Map(data.map((d) => [d.id, d] as const))
+
       setSelected((prev) => {
         const next: Record<string, number> = { ...prev }
         for (const id of incoming) {
           if (Object.keys(next).length >= MAX_SELECTED) break
-          if (!available.has(id)) continue
-          if (next[id] === undefined) next[id] = 0.5
+          const l = byId.get(id)
+          if (!l) continue
+          if (next[id] === undefined) next[id] = defaultStrengthFor(l) // ✅ default = recStrength else 1
         }
         onSelectedChange?.(
           Object.entries(next).map(([id, strength]) => ({ id, strength })),
@@ -206,7 +230,7 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
       }
       const next = { ...prev }
       if (already) delete next[l.id]
-      else next[l.id] = 0.5
+      else next[l.id] = defaultStrengthFor(l) // ✅ default = recStrength else 1
       onSelectedChange?.(
         Object.entries(next).map(([id, strength]) => ({ id, strength })),
       )
@@ -315,7 +339,7 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
                     className={styles.selectedRange}
                     type="range"
                     min={0}
-                    max={1}
+                    max={2}
                     step={0.05}
                     value={strength}
                     onChange={(e) =>
@@ -482,6 +506,7 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
                       >
                         {l.name}
                       </h3>
+
                       <div className={styles.menu}>
                         <div
                           className={styles.tooltipWrapper}
@@ -506,7 +531,6 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
                         </div>
                       </div>
                     </div>
-
                     <div className={styles.tagsRow}>
                       {(l.tags || []).slice(0, 4).map((t) => (
                         <span key={t} className={styles.tagChip}>
@@ -629,6 +653,16 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
             </div>
 
             <div className={styles.drawerBody}>
+              {/* ✅ Trigger word display */}
+              {detailsItem.trigger ? (
+                <div className={styles.triggerRow}>
+                  <span className={styles.triggerLabel}>Trigger</span>
+                  <span className={styles.triggerValue}>
+                    {detailsItem.trigger}
+                  </span>
+                </div>
+              ) : null}
+
               {/* --- Carousel media (preview + sampleUrls) --- */}
               <div className={styles.drawerMedia}>
                 {(() => {
@@ -725,14 +759,28 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
                     {timeAgo(detailsItem.createdAt)}
                   </div>
                 </div>
+
                 <div className={styles.infoCard}>
                   <div className={styles.infoLabel}>Favourites</div>
                   <div className={styles.infoValue}>
                     {detailsItem.favorites ?? 0}
                   </div>
                 </div>
-              </div>
 
+                <div className={styles.infoCard}>
+                  <div className={styles.infoLabel}>Trigger</div>
+                  <div className={styles.infoValue}>
+                    {detailsItem.trigger?.trim() ? detailsItem.trigger : '—'}
+                  </div>
+                </div>
+
+                <div className={styles.infoCard}>
+                  <div className={styles.infoLabel}>Strength</div>
+                  <div className={styles.infoValue}>
+                    {detailsItem.recommendedStrength ?? '—'}
+                  </div>
+                </div>
+              </div>
               {(detailsItem.tags?.length ?? 0) > 0 && (
                 <div className={styles.drawerTags}>
                   {detailsItem.tags!.map((t) => (
@@ -756,9 +804,9 @@ export default function LoraLibrary({ onOpenDetails, onSelectedChange }: Props) 
                         className={styles.selectedRange}
                         type="range"
                         min={0}
-                        max={1}
+                        max={2}
                         step={0.05}
-                        value={selected[detailsItem.id]}
+                        value={selected[detailsItem.id] ?? defaultStrengthFor(detailsItem)}
                         onChange={(e) =>
                           setStrength(
                             detailsItem.id,
